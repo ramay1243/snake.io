@@ -108,7 +108,13 @@
 
         // Элементы
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        if (!canvas) {
+            console.error('Canvas not found!');
+        }
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        if (!ctx && canvas) {
+            console.error('Cannot get 2d context!');
+        }
         const minimapCanvas = document.getElementById('minimapCanvas');
         const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
         const scoreEl = document.getElementById('score');
@@ -124,6 +130,7 @@
 
         // Настройка canvas
         function resizeCanvas() {
+            if (!canvas) return;
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetHeight;
             
@@ -368,6 +375,9 @@
         // Обновление игры
         function update() {
             if (gameState !== 'playing') return;
+            
+            // Проверяем, что player существует
+            if (!player || !player.body) return;
 
             gameFrame++;
 
@@ -705,12 +715,18 @@
 
         // Отрисовка
         function draw() {
+            // Проверяем, что canvas и ctx существуют
+            if (!canvas || !ctx) return;
+            
             // Всегда рисуем фон
             ctx.fillStyle = '#1a1a2e';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             // Если не играем, не рисуем игровые объекты
             if (gameState !== 'playing') return;
+            
+            // Проверяем, что player существует
+            if (!player || !player.body) return;
             
             // Вычисляем видимую область с учетом масштаба
             const viewWidth = canvas.width / camera.zoom;
@@ -783,7 +799,7 @@
                     // Размер бота зависит от массы (более заметная зависимость)
                     const botMass = bot.mass || bot.length;
                     const botSize = 8 + (botMass * 0.8); // Увеличена зависимость от массы
-                    drawSnake(bot.body, bot.color, false, bot.headType, bot.direction, botSize);
+                    drawSnake(bot.body, bot.color, false, bot.headType, bot.direction, botSize, viewWidth, viewHeight);
                     // Ник бота с уровнем
                     if (bot.body.length > 0) {
                         const headScreenX = bot.body[0].x - camera.x;
@@ -848,7 +864,7 @@
             if (player && player.body && player.body.length > 0) {
                 // Размер зависит от массы (более заметная зависимость)
                 const playerSize = 8 + (player.mass * 0.8); // Увеличена зависимость от массы
-                drawSnake(player.body, player.color, true, player.headType, player.direction, playerSize);
+                drawSnake(player.body, player.color, true, player.headType, player.direction, playerSize, viewWidth, viewHeight);
                 // Ник игрока
                 const headScreenX = player.body[0].x - camera.x;
                 const headScreenY = player.body[0].y - camera.y;
@@ -863,7 +879,7 @@
                     const partScreenY = part.body[0].y - camera.y;
                     if (partScreenX > -100 && partScreenX < canvas.width + 100 &&
                         partScreenY > -100 && partScreenY < canvas.height + 100) {
-                        drawSnake(part.body, part.color, false, part.headType, part.direction, partSize);
+                        drawSnake(part.body, part.color, false, part.headType, part.direction, partSize, viewWidth, viewHeight);
                         const partLevel = calculateLevel(part.mass);
                         drawName(partScreenX, partScreenY - 25, part.name, part.color, partLevel);
                     }
@@ -902,9 +918,15 @@
             });
         }
 
-        function drawSnake(body, color, isPlayer, headType = 'dragon', direction = { x: 1, y: 0 }, baseSize = null) {
+        function drawSnake(body, color, isPlayer, headType = 'dragon', direction = { x: 1, y: 0 }, baseSize = null, viewWidth = null, viewHeight = null) {
             const defaultSize = isPlayer ? 16 : 13;
             const segmentSize = baseSize || defaultSize;
+            
+            // Вычисляем viewWidth и viewHeight, если не переданы
+            if (!viewWidth || !viewHeight) {
+                viewWidth = canvas.width / camera.zoom;
+                viewHeight = canvas.height / camera.zoom;
+            }
             
             body.forEach((segment, index) => {
                 // Размер уменьшается к хвосту
@@ -1323,14 +1345,23 @@
 
         // Игровой цикл
         function gameLoop() {
+            if (!canvas || !ctx) {
+                // Если canvas не найден, пытаемся найти его снова
+                setTimeout(gameLoop, 100);
+                return;
+            }
             update();
             draw();
             requestAnimationFrame(gameLoop);
         }
         
         // Запуск игрового цикла
-        gameLoop();
-        console.log('Game loop started');
+        if (canvas && ctx) {
+            gameLoop();
+            console.log('Game loop started');
+        } else {
+            console.error('Canvas or context not available, game loop not started');
+        }
 
         // Управление
         let currentDirection = { x: 1, y: 0 };
@@ -1576,7 +1607,6 @@
                     const nameInput = document.getElementById('playerNameInput');
                     const playerName = nameInput ? (nameInput.value.trim() || 'Вы') : 'Вы';
                     if (playerName.length > 0) {
-                        player.name = playerName;
                         localStorage.setItem('playerName', playerName);
                     }
                     
@@ -1754,11 +1784,6 @@
                         player.parts.splice(index, 1);
                         updateUI();
                     }
-                }
-                
-                // Отрисовка части
-                if (part.body.length > 0) {
-                    drawSnake(part.body, part.color, false, part.headType, part.direction);
                 }
             });
         }

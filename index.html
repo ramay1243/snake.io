@@ -649,19 +649,19 @@
                     
                     // Проверяем столкновение с телом бота (только если бот ЗНАЧИТЕЛЬНО больше игрока)
                     // Добавляем большой запас, чтобы избежать ложных срабатываний
-                    // И только если прошло время после последнего поедания еды
-                    if (botMass > playerMass * 1.5 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 30)) {
+                    // И только если прошло время после последнего поедания еды (минимум 60 кадров)
+                    if (botMass > playerMass * 2.0 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 60)) {
                         bot.body.forEach((segment, index) => {
-                            if (index < 20) return; // Игнорируем первые 20 сегментов (увеличено с 10)
+                            if (index < 30) return; // Игнорируем первые 30 сегментов (увеличено с 20)
                             
                             const playerSize = 8 + (playerMass * 0.8);
                             const botSize = 8 + (botMass * 0.8);
                             const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
                             
-                            // ОЧЕНЬ строгий порог столкновения - только реальное касание
-                            // Уменьшаем порог до 20% суммы размеров (было 30%)
+                            // КРАЙНЕ строгий порог столкновения - только реальное касание
+                            // Уменьшаем порог до 15% суммы размеров (было 20%)
                             // Это означает, что нужно практически врезаться
-                            if (dist < (playerSize + botSize) * 0.2) {
+                            if (dist < (playerSize + botSize) * 0.15) {
                                 // Дополнительная проверка: убеждаемся, что игрок действительно движется к сегменту
                                 const angleToSegment = Math.atan2(segment.y - player.y, segment.x - player.x);
                                 const playerAngle = Math.atan2(player.direction.y, player.direction.x);
@@ -669,13 +669,18 @@
                                 const minAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
                                 
                                 // Столкновение только если игрок движется НАВСТРЕЧУ сегменту (не убегает)
-                                if (minAngleDiff < Math.PI / 2) { // Движется в направлении сегмента
-                                    if (!activeBoosters.shield) {
-                                        gameOver();
-                                        return;
-                                    } else {
-                                        activeBoosters.shield = false;
-                                        createShieldEffect(player.x, player.y);
+                                // И угол должен быть очень маленьким (меньше 45 градусов)
+                                if (minAngleDiff < Math.PI / 4) { // Движется почти прямо на сегмент (было PI/2)
+                                    // Еще одна проверка: скорость должна быть нормальной
+                                    const playerSpeed = Math.sqrt(player.direction.x * player.direction.x + player.direction.y * player.direction.y) * player.speed;
+                                    if (playerSpeed < 10) { // Нормальная скорость
+                                        if (!activeBoosters.shield) {
+                                            gameOver();
+                                            return;
+                                        } else {
+                                            activeBoosters.shield = false;
+                                            createShieldEffect(player.x, player.y);
+                                        }
                                     }
                                 }
                             }
@@ -684,40 +689,9 @@
                 }
             });
 
-            // Столкновение с собственным телом (проверяем только если длина больше 100)
-            // И только если прошло достаточно времени после последнего поедания еды (минимум 30 кадров)
-            if (player.length > 100 && player.body.length > 100 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 30)) {
-                // Проверяем только сегменты, которые достаточно далеко от головы
-                // Игнорируем первые 70 сегментов, чтобы избежать ложных срабатываний
-                player.body.forEach((segment, index) => {
-                    if (index < 70) return; // Первые 70 сегментов не считаются (увеличено с 50)
-                    
-                    // Проверяем расстояние с учетом размера игрока
-                    const playerSize = 8 + (player.mass * 0.8);
-                    const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
-                    
-                    // ОЧЕНЬ строгий порог столкновения - только реальное касание
-                    // Столкновение только если действительно очень близко (меньше 15% размера, было 20%)
-                    if (dist < playerSize * 0.15) {
-                        // Дополнительная проверка: убеждаемся, что игрок действительно движется к своему телу
-                        const angleToSegment = Math.atan2(segment.y - player.y, segment.x - player.x);
-                        const playerAngle = Math.atan2(player.direction.y, player.direction.x);
-                        const angleDiff = Math.abs(angleToSegment - playerAngle);
-                        const minAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
-                        
-                        // Столкновение только если игрок движется НАВСТРЕЧУ своему телу (не убегает)
-                        if (minAngleDiff < Math.PI / 2) { // Движется в направлении сегмента
-                            if (!activeBoosters.shield) {
-                                gameOver();
-                                return;
-                            } else {
-                                activeBoosters.shield = false;
-                                createShieldEffect(player.x, player.y);
-                            }
-                        }
-                    }
-                });
-            }
+            // Столкновение с собственным телом ОТКЛЮЧЕНО
+            // Игрок никогда не умирает от столкновения с собственным телом
+            // (код проверки самостолкновения удален по запросу пользователя)
 
             // Обновление частей змейки после split
             updateSnakeParts();
@@ -1880,8 +1854,8 @@
                 return;
             }
             
-            // Защита от завершения игры сразу после поедания еды (в течение 30 кадров)
-            if (player.lastFoodTime && gameFrame && (gameFrame - player.lastFoodTime) < 30) {
+            // Защита от завершения игры сразу после поедания еды (в течение 60 кадров = 1 секунда)
+            if (player.lastFoodTime && gameFrame && (gameFrame - player.lastFoodTime) < 60) {
                 console.log('Защита: слишком рано после поедания еды');
                 return;
             }

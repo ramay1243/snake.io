@@ -323,6 +323,9 @@
             const validHeadTypes = ['dragon', 'knight', 'tiger', 'wolf', 'snake', 'eagle', 'lion', 'bear', 'panda', 'cat', 'dog', 'shark', 'unicorn', 'robot', 'ninja', 'pirate', 'superhero', 'dinosaur', 'fox', 'rabbit', 'penguin', 'monkey', 'elephant', 'crocodile'];
             const headType = validHeadTypes.includes(savedHeadType) ? savedHeadType : 'dragon';
             
+            // Обновляем currentSkin чтобы он соответствовал сохраненному скину
+            currentSkin = headType;
+            
             // Получаем сохраненный ник
             const savedName = localStorage.getItem('playerName') || 'Вы';
             
@@ -335,7 +338,7 @@
                 length: 5,
                 mass: 5,
                 level: 1,
-                color: getSkinColor(currentSkin),
+                color: getSkinColor(headType), // Используем headType для получения правильного цвета
                 headType: headType,
                 name: savedName,
                 parts: [],
@@ -454,12 +457,38 @@
             });
         }
 
-        function getSkinColor(skin) {
-            switch(skin) {
+        function getSkinColor(skinType) {
+            // Эта функция должна возвращать базовый цвет для скина,
+            // который используется для градиентов тела змеи
+            switch(skinType) {
                 case 'rainbow': return 'rainbow';
                 case 'gold': return '#FFA500';
                 case 'neon': return '#4A90E2';
-                default: return '#2ECC71';
+                case 'dragon': return '#E74C3C';
+                case 'knight': return '#34495E';
+                case 'tiger': return '#F39C12';
+                case 'wolf': return '#95A5A6';
+                case 'eagle': return '#8B4513';
+                case 'lion': return '#F39C12';
+                case 'bear': return '#8B4513';
+                case 'panda': return '#FFFFFF';
+                case 'cat': return '#F08080';
+                case 'dog': return '#D2B48C';
+                case 'shark': return '#708090';
+                case 'unicorn': return '#ADD8E6';
+                case 'robot': return '#B0C4DE';
+                case 'ninja': return '#2F4F4F';
+                case 'pirate': return '#8B4513';
+                case 'superhero': return '#DC143C';
+                case 'dinosaur': return '#6B8E23';
+                case 'fox': return '#FF8C00';
+                case 'rabbit': return '#F5F5DC';
+                case 'penguin': return '#4682B4';
+                case 'monkey': return '#A0522D';
+                case 'elephant': return '#778899';
+                case 'crocodile': return '#556B2F';
+                case 'snake': return '#2ECC71';
+                default: return '#2ECC71'; // Зеленый по умолчанию
             }
         }
 
@@ -2005,6 +2034,7 @@
             // Если игра запущена, обновляем скин игрока сразу
             if (player && gameState === 'playing') {
                 player.headType = headType;
+                player.color = getSkinColor(headType); // Обновляем цвет тоже
             }
             
             // Сохраняем в localStorage

@@ -270,7 +270,7 @@
 
             // Еда
             food = [];
-            for (let i = 0; i < 150; i++) {
+            for (let i = 0; i < 300; i++) {
                 createFood();
             }
             
@@ -426,6 +426,11 @@
                     updateUI();
                     localStorage.setItem('snakeCoins', coins);
                 }
+            }
+            
+            // Поддерживаем минимальное количество еды на карте
+            while (food.length < 300) {
+                createFood();
             }
             
             // Сбор выстреленной массы
@@ -1588,13 +1593,16 @@
             const halfMass = Math.floor(player.mass / 2);
             const halfLength = Math.floor(player.length / 2);
             
-            // Создаем новую часть
+            // Создаем новую часть - размещаем немного позади основной части
+            // Используем тот же direction, чтобы двигалась в том же направлении
+            const offsetX = -player.direction.x * 40;
+            const offsetY = -player.direction.y * 40;
             const newPart = {
-                x: player.x - player.direction.x * 50,
-                y: player.y - player.direction.y * 50,
+                x: player.x + offsetX,
+                y: player.y + offsetY,
                 body: player.body.slice(halfLength),
-                direction: { x: -player.direction.x, y: -player.direction.y },
-                speed: player.speed * 1.5, // Быстрее после разделения
+                direction: { x: player.direction.x, y: player.direction.y }, // То же направление
+                speed: player.speed * 0.8, // Немного медленнее, чтобы оставалась рядом
                 length: halfLength,
                 mass: halfMass,
                 color: player.color,
@@ -1643,6 +1651,32 @@
         // Обновление частей змейки после split
         function updateSnakeParts() {
             player.parts.forEach((part, index) => {
+                // Вычисляем расстояние до основной части
+                const distToMain = Math.sqrt(Math.pow(player.x - part.x, 2) + Math.pow(player.y - part.y, 2));
+                
+                // Если часть слишком далеко, корректируем направление к основной части
+                if (distToMain > 100) {
+                    const angleToMain = Math.atan2(player.y - part.y, player.x - part.x);
+                    part.direction.x = Math.cos(angleToMain) * 0.3 + part.direction.x * 0.7;
+                    part.direction.y = Math.sin(angleToMain) * 0.3 + part.direction.y * 0.7;
+                    // Нормализуем направление
+                    const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
+                    if (len > 0) {
+                        part.direction.x /= len;
+                        part.direction.y /= len;
+                    }
+                } else if (distToMain < 60) {
+                    // Если слишком близко, немного отдаляемся
+                    const angleAway = Math.atan2(part.y - player.y, part.x - player.x);
+                    part.direction.x = Math.cos(angleAway) * 0.2 + part.direction.x * 0.8;
+                    part.direction.y = Math.sin(angleAway) * 0.2 + part.direction.y * 0.8;
+                    const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
+                    if (len > 0) {
+                        part.direction.x /= len;
+                        part.direction.y /= len;
+                    }
+                }
+                
                 // Движение части
                 part.x += part.direction.x * part.speed;
                 part.y += part.direction.y * part.speed;
@@ -1657,8 +1691,7 @@
                 part.mergeTimer--;
                 if (part.mergeTimer <= 0) {
                     // Слияние обратно
-                    const dist = Math.sqrt(Math.pow(player.x - part.x, 2) + Math.pow(player.y - part.y, 2));
-                    if (dist < 50) {
+                    if (distToMain < 50) {
                         player.mass += part.mass;
                         player.length += part.length;
                         player.parts.splice(index, 1);

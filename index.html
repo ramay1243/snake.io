@@ -690,19 +690,19 @@
 
             // Столкновения с другими змеями
             bots.forEach((bot, botIndex) => {
-                // Проверяем столкновение головы игрока с телом бота
+                // Проверяем столкновение головы игрока с головой/телом бота
                 if (bot.body.length > 0) {
                     const botHead = bot.body[0];
                     const distToBotHead = Math.sqrt(Math.pow(player.x - botHead.x, 2) + Math.pow(player.y - botHead.y, 2));
                     
-                    // Если игрок выше уровня бота (хотя бы на 1) - съедаем его
                     const playerMass = player.mass || player.length;
                     const botMass = bot.mass || bot.length;
                     const playerLevelCheck = player.level || calculateLevel(playerMass);
                     const botLevelCheck = bot.level || calculateLevel(botMass);
                     const playerSize = 8 + (playerMass * 0.8);
                     const botSize = 8 + (botMass * 0.8);
-                    // Игрок может съесть бота, если его уровень выше (хотя бы на 1)
+                    
+                    // Если игрок выше уровня бота (хотя бы на 1) - съедаем его
                     if (distToBotHead < (playerSize + botSize) * 0.6 && playerLevelCheck > botLevelCheck) {
                         // Игрок съедает бота
                         const gainedMass = Math.floor(botMass / 2);
@@ -717,46 +717,38 @@
                         return; // Выходим из цикла, чтобы не проверять дальше
                     }
                     
-                    // Проверяем столкновение с телом бота (только если бот выше уровня игрока хотя бы на 1)
-                    // Добавляем большой запас, чтобы избежать ложных срабатываний
-                    // И только если прошло время после последнего поедания еды (минимум 60 кадров)
-                    const playerLevelCheck2 = player.level || calculateLevel(playerMass);
-                    const botLevelCheck2 = bot.level || calculateLevel(botMass);
-                    if (botLevelCheck2 > playerLevelCheck2 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 60)) {
-                        bot.body.forEach((segment, index) => {
-                            if (index < 30) return; // Игнорируем первые 30 сегментов (увеличено с 20)
-                            
-                            const playerSize = 8 + (playerMass * 0.8);
-                            const botSize = 8 + (botMass * 0.8);
-                            const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
-                            
-                            // КРАЙНЕ строгий порог столкновения - только реальное касание
-                            // Уменьшаем порог до 15% суммы размеров (было 20%)
-                            // Это означает, что нужно практически врезаться
-                            if (dist < (playerSize + botSize) * 0.15) {
-                                // Дополнительная проверка: убеждаемся, что игрок действительно движется к сегменту
-                                const angleToSegment = Math.atan2(segment.y - player.y, segment.x - player.x);
-                                const playerAngle = Math.atan2(player.direction.y, player.direction.x);
-                                const angleDiff = Math.abs(angleToSegment - playerAngle);
-                                const minAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+                    // Если бот выше уровня игрока хотя бы на 1 - бот может убить игрока
+                    if (botLevelCheck > playerLevelCheck) {
+                        // Проверяем столкновение с головой бота (более простая проверка)
+                        if (distToBotHead < (playerSize + botSize) * 0.7) {
+                            if (!activeBoosters.shield) {
+                                gameOver();
+                                return;
+                            } else {
+                                activeBoosters.shield = false;
+                                createShieldEffect(player.x, player.y);
+                            }
+                        }
+                        
+                        // Также проверяем столкновение с телом бота (упрощенная проверка)
+                        if (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 30) {
+                            bot.body.forEach((segment, index) => {
+                                if (index < 10) return; // Игнорируем только первые 10 сегментов
                                 
-                                // Столкновение только если игрок движется НАВСТРЕЧУ сегменту (не убегает)
-                                // И угол должен быть очень маленьким (меньше 45 градусов)
-                                if (minAngleDiff < Math.PI / 4) { // Движется почти прямо на сегмент (было PI/2)
-                                    // Еще одна проверка: скорость должна быть нормальной
-                                    const playerSpeed = Math.sqrt(player.direction.x * player.direction.x + player.direction.y * player.direction.y) * player.speed;
-                                    if (playerSpeed < 10) { // Нормальная скорость
-                                        if (!activeBoosters.shield) {
-                                            gameOver();
-                                            return;
-                                        } else {
-                                            activeBoosters.shield = false;
-                                            createShieldEffect(player.x, player.y);
-                                        }
+                                const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
+                                
+                                // Упрощенная проверка столкновения (30% суммы размеров)
+                                if (dist < (playerSize + botSize) * 0.3) {
+                                    if (!activeBoosters.shield) {
+                                        gameOver();
+                                        return;
+                                    } else {
+                                        activeBoosters.shield = false;
+                                        createShieldEffect(player.x, player.y);
                                     }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
                 }
             });

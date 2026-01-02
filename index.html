@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Snake.io - Выживание</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div id="score">Очки: 0</div>
+            <div id="rank">Место: #1</div>
+            <div id="coins">💰 0</div>
+            <div id="crystals">💎 0</div>
+            <div id="length">Длина: 5</div>
+            
+            <!-- Мини-карта -->
+            <div id="minimap">
+                <canvas id="minimapCanvas"></canvas>
+            </div>
+            
+            <!-- Топ-3 -->
+            <div id="top3">
+                <h3>🏆 ТОП-3</h3>
+                <div id="top3List"></div>
+            </div>
+            
+            <!-- Джойстик -->
+            <div id="joystick">
+                <div id="joystickBase">
+                    <div id="joystickHandle"></div>
+                </div>
+            </div>
+            
+            <!-- Кнопки действий -->
+            <div id="actionButtons">
+                <button id="splitBtn" class="action-btn" title="Разделиться (двойной тап)">⚡ SPLIT</button>
+                <button id="ejectBtn" class="action-btn" title="Выстрел массой">💨 EJECT</button>
+            </div>
+            
+            <div id="startScreen">
+                <div class="screen-title">🐍 Snake.io</div>
+                <div style="color: #fff; margin-bottom: 20px; text-align: center; padding: 0 20px;">
+                    Выживай и стань самой большой змеей!
+                </div>
+                <div style="margin-bottom: 15px; width: 80%; max-width: 300px;">
+                    <input type="text" id="playerNameInput" placeholder="Введите ваш ник" 
+                           style="width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 2px solid #2ECC71; background: rgba(255,255,255,0.1); color: #fff; text-align: center;" 
+                           maxlength="15">
+                </div>
+                <button class="btn" id="startBtn">ИГРАТЬ</button>
+                <button class="btn btn-secondary" id="shopBtn">МАГАЗИН</button>
+            </div>
+
+            <div id="gameOverScreen">
+                <div class="screen-title">Вы проиграли!</div>
+                <div id="finalScore" style="color: #fff; font-size: 32px; margin: 20px 0;">Длина: 0</div>
+                <div id="finalRank" style="color: #FFD700; font-size: 24px; margin-bottom: 20px;">Место: #0</div>
+                <button class="btn" id="restartBtn">ИГРАТЬ СНОВА</button>
+                <button class="btn btn-secondary" id="shopBtn2">МАГАЗИН</button>
+            </div>
+
+            <div id="shopScreen">
+                <div class="screen-title">МАГАЗИН</div>
+                <div class="shop-item">
+                    <h3>✏️ Изменить ник</h3>
+                    <input type="text" id="changeNameInput" placeholder="Новый ник" 
+                           style="width: 80%; padding: 10px; font-size: 16px; border-radius: 10px; border: 2px solid #2ECC71; background: rgba(255,255,255,0.1); color: #fff; text-align: center; margin-bottom: 10px;" 
+                           maxlength="15">
+                    <button class="btn" onclick="changePlayerName()">ИЗМЕНИТЬ НИК</button>
+                </div>
+                <div class="shop-item">
+                    <h3>💎 Кристаллы</h3>
+                    <button class="btn btn-premium" onclick="buyCrystals(50)">50 кристаллов - 99₽</button>
+                    <button class="btn btn-premium" onclick="buyCrystals(100)">100 кристаллов - 179₽</button>
+                    <button class="btn btn-premium" onclick="buyCrystals(500)">500 кристаллов - 799₽</button>
+                </div>
+                <div class="shop-item">
+                    <h3>🎨 Скины головы</h3>
+                    <div class="crystal-price">💎 15</div>
+                    <button class="btn" onclick="buyHeadType('dragon', 15)">🐉 Дракон</button>
+                    <button class="btn" onclick="buyHeadType('knight', 15)">⚔️ Рыцарь</button>
+                    <button class="btn" onclick="buyHeadType('tiger', 15)">🐅 Тигр</button>
+                    <button class="btn" onclick="buyHeadType('wolf', 15)">🐺 Волк</button>
+                    <button class="btn" onclick="buyHeadType('eagle', 15)">🦅 Орел</button>
+                    <button class="btn" onclick="buyHeadType('lion', 15)">🦁 Лев</button>
+                    <button class="btn" onclick="buyHeadType('bear', 15)">🐻 Медведь</button>
+                </div>
+                <div class="shop-item">
+                    <h3>⚡ Бустеры</h3>
+                    <div class="crystal-price">💎 15</div>
+                    <button class="btn" onclick="buyBooster('speed', 15)">Ускорение (30 сек)</button>
+                    <button class="btn" onclick="buyBooster('shield', 15)">Щит (1 столкновение)</button>
+                </div>
+                <button class="btn" id="closeShopBtn">ЗАКРЫТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        // Элементы
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+        const scoreEl = document.getElementById('score');
+        const rankEl = document.getElementById('rank');
+        const coinsEl = document.getElementById('coins');
+        const crystalsEl = document.getElementById('crystals');
+        const lengthEl = document.getElementById('length');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const shopScreen = document.getElementById('shopScreen');
+        // Инициализация элементов после загрузки DOM
+        let startBtn, restartBtn, shopBtn, shopBtn2, closeShopBtn, finalScoreEl, finalRankEl;
+
+        // Настройка canvas
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            // Мини-карта
+            if (minimapCanvas) {
+                minimapCanvas.width = minimapCanvas.offsetWidth;
+                minimapCanvas.height = minimapCanvas.offsetHeight;
+            }
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Игровые переменные
+        let gameState = 'menu';
+        let gameFrame = 0;
+        let score = 0;
+        let coins = parseInt(localStorage.getItem('snakeCoins') || '0');
+        let crystals = parseInt(localStorage.getItem('snakeCrystals') || '10');
+        let currentSkin = localStorage.getItem('snakeSkin') || 'default';
+        let activeBoosters = { speed: 0, shield: false };
+
+        // Размер мира (большая карта)
+        const worldWidth = 3000;
+        const worldHeight = 3000;
+        
+        // Камера
+        let camera = {
+            x: 0,
+            y: 0
+        };
+
+        // Функция для расчета уровня на основе массы
+        function calculateLevel(mass) {
+            return Math.max(1, Math.floor(mass / 5) + 1);
+        }
+        
+        // Игрок (змея) - может состоять из нескольких частей (как в Agar.io)
+        let player = {
+            x: 0,
+            y: 0,
+            body: [],
+            direction: { x: 1, y: 0 },
+            speed: 2,
+            length: 5,
+            mass: 5, // Масса для расчета размера
+            level: 1, // Уровень игрока
+            color: '#2ECC71',
+            headType: 'dragon',
+            name: 'Вы',
+            parts: [], // Части змейки после split
+            splitCooldown: 0, // Кулдаун для split
+            ejectCooldown: 0 // Кулдаун для eject
+        };
+        
+        // Функция для расчета уровня на основе массы
+        function calculateLevel(mass) {
+            return Math.max(1, Math.floor(mass / 5) + 1);
+        }
+
+        // Другие змеи (боты для симуляции онлайн)
+        let bots = [];
+        let food = [];
+        let effects = [];
+        let viruses = []; // Вирусы/препятствия (как в Agar.io)
+        let ejectedMass = []; // Выстреленная масса
+        
+        // Типы голов для змей
+        const headTypes = ['dragon', 'knight', 'tiger', 'wolf', 'snake', 'eagle', 'lion', 'bear'];
+        
+        // Имена для ботов
+        const botNames = ['Змейка', 'Охотник', 'Хищник', 'Быстрый', 'Сильный', 'Умный', 'Смелый', 'Ловкий', 'Злой', 'Быстрый', 'Тигр', 'Волк'];
+        
+        // Джойстик
+        let joystickActive = false;
+        let joystickX = 0;
+        let joystickY = 0;
+        const joystickBase = document.getElementById('joystickBase');
+        const joystickHandle = document.getElementById('joystickHandle');
+        const joystickRadius = 60;
+
+        // Обновление UI
+        function updateUI() {
+            coinsEl.textContent = `💰 ${coins}`;
+            crystalsEl.textContent = `💎 ${crystals}`;
+            lengthEl.textContent = `Уровень: ${player.level || 1} | Масса: ${Math.floor(player.mass || player.length)}`;
+            scoreEl.textContent = `Очки: ${score}`;
+            
+            // Ранк (показываем место среди ботов)
+            const playerMass = player.mass || player.length;
+            const allSnakes = [{ length: playerMass, isPlayer: true }, ...bots.map(b => ({ length: b.length, isPlayer: false }))];
+            allSnakes.sort((a, b) => b.length - a.length);
+            const rank = allSnakes.findIndex(s => s.isPlayer) + 1;
+            rankEl.textContent = `Место: #${rank}`;
+        }
+
+        updateUI();
+
+        // Инициализация игры
+        function initGame() {
+            gameFrame = 0;
+            score = 0;
+            // Определяем тип головы из сохраненного скина
+            const savedHeadType = localStorage.getItem('snakeSkin') || 'dragon';
+            const validHeadTypes = ['dragon', 'knight', 'tiger', 'wolf', 'snake', 'eagle', 'lion', 'bear'];
+            const headType = validHeadTypes.includes(savedHeadType) ? savedHeadType : 'dragon';
+            
+            // Получаем сохраненный ник
+            const savedName = localStorage.getItem('playerName') || 'Вы';
+            
+            player = {
+                x: worldWidth / 2,
+                y: worldHeight / 2,
+                body: [],
+                direction: { x: 1, y: 0 },
+                speed: 3, // Начальная скорость (будет пересчитана)
+                length: 5,
+                mass: 5,
+                level: 1,
+                color: getSkinColor(currentSkin),
+                headType: headType,
+                name: savedName,
+                parts: [],
+                splitCooldown: 0,
+                ejectCooldown: 0
+            };
+            
+            // Начальное тело
+            for (let i = 0; i < player.length; i++) {
+                player.body.push({
+                    x: player.x - i * 20,
+                    y: player.y
+                });
+            }
+
+            // Камера на игрока
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+
+            // Боты
+            bots = [];
+            for (let i = 0; i < 12; i++) {
+                bots.push(createBot());
+            }
+
+            // Еда
+            food = [];
+            for (let i = 0; i < 150; i++) {
+                createFood();
+            }
+            
+            // Вирусы (препятствия)
+            viruses = [];
+            for (let i = 0; i < 10; i++) {
+                createVirus();
+            }
+            
+            // Выстреленная масса
+            ejectedMass = [];
+
+            effects = [];
+        }
+        
+        function createVirus() {
+            viruses.push({
+                x: Math.random() * worldWidth,
+                y: Math.random() * worldHeight,
+                size: 30,
+                color: '#00ff00',
+                spikes: 6 // Количество шипов
+            });
+        }
+
+        function createBot() {
+            const x = Math.random() * worldWidth;
+            const y = Math.random() * worldHeight;
+            const length = 5 + Math.floor(Math.random() * 20);
+            const mass = length;
+            const level = calculateLevel(mass);
+            const headType = headTypes[Math.floor(Math.random() * headTypes.length)];
+            const name = botNames[Math.floor(Math.random() * botNames.length)] + Math.floor(Math.random() * 100);
+            
+            // Скорость зависит от массы (маленькие быстрее)
+            const baseSpeed = 3;
+            const speedMultiplier = Math.max(0.4, 1 - (mass - 5) / 80);
+            const botSpeed = baseSpeed * speedMultiplier;
+            
+            const bot = {
+                x: x,
+                y: y,
+                body: [],
+                direction: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
+                speed: botSpeed,
+                length: length,
+                mass: mass,
+                level: level,
+                color: `hsl(${Math.random() * 60 + 180}, 60%, 45%)`,
+                headType: headType,
+                name: name,
+                targetFood: null
+            };
+            
+            // Нормализация направления
+            const dirLen = Math.sqrt(bot.direction.x * bot.direction.x + bot.direction.y * bot.direction.y);
+            if (dirLen > 0) {
+                bot.direction.x /= dirLen;
+                bot.direction.y /= dirLen;
+            }
+            
+            // Тело бота
+            for (let i = 0; i < length; i++) {
+                bot.body.push({
+                    x: bot.x - i * 15,
+                    y: bot.y
+                });
+            }
+            
+            return bot;
+        }
+
+        function createFood() {
+            food.push({
+                x: Math.random() * worldWidth,
+                y: Math.random() * worldHeight,
+                size: 8 + Math.random() * 4,
+                value: 1,
+                color: `hsl(${Math.random() * 40 + 30}, 80%, 55%)`
+            });
+        }
+
+        function getSkinColor(skin) {
+            switch(skin) {
+                case 'rainbow': return 'rainbow';
+                case 'gold': return '#FFA500';
+                case 'neon': return '#4A90E2';
+                default: return '#2ECC71';
+            }
+        }
+
+        // Обновление игры
+        function update() {
+            if (gameState !== 'playing') return;
+
+            gameFrame++;
+
+            // Движение игрока
+            player.x += player.direction.x * player.speed;
+            player.y += player.direction.y * player.speed;
+
+            // Границы мира (телепорт)
+            if (player.x < 0) player.x = worldWidth;
+            if (player.x > worldWidth) player.x = 0;
+            if (player.y < 0) player.y = worldHeight;
+            if (player.y > worldHeight) player.y = 0;
+            
+            // Камера следует за игроком
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+            
+            // Ограничение камеры границами мира
+            camera.x = Math.max(0, Math.min(camera.x, worldWidth - canvas.width));
+            camera.y = Math.max(0, Math.min(camera.y, worldHeight - canvas.height));
+
+            // Сначала обновляем тело (добавляем новую позицию головы)
+            player.body.unshift({ x: player.x, y: player.y });
+            
+            // Обновление бустеров
+            if (activeBoosters.speed > 0) {
+                activeBoosters.speed--;
+            }
+            
+            // Обновление кулдаунов
+            if (player.splitCooldown > 0) player.splitCooldown--;
+            if (player.ejectCooldown > 0) player.ejectCooldown--;
+            
+            // Обновляем уровень на основе массы
+            player.level = calculateLevel(player.mass);
+            
+            // Скорость зависит от массы (маленькие быстрее, большие медленнее)
+            const baseSpeed = 3; // Базовая скорость для маленьких червяков
+            const speedMultiplier = Math.max(0.3, 1 - (player.mass - 5) / 70); // Более заметное замедление
+            player.speed = baseSpeed * speedMultiplier + (activeBoosters.speed > 0 ? 0.8 : 0);
+
+            // Сбор еды (ПЕРЕД проверкой столкновений, чтобы не было ложных срабатываний)
+            // Используем обратный цикл, чтобы избежать проблем при удалении элементов
+            for (let i = food.length - 1; i >= 0; i--) {
+                const f = food[i];
+                const dist = Math.sqrt(Math.pow(player.x - f.x, 2) + Math.pow(player.y - f.y, 2));
+                const playerSize = 8 + (player.mass * 0.8);
+                
+                // Увеличиваем порог сбора еды для более надежного обнаружения
+                if (dist < f.size + playerSize * 0.8) {
+                    player.length += f.value;
+                    player.mass += f.value;
+                    player.level = calculateLevel(player.mass); // Обновляем уровень
+                    score += f.value * 10;
+                    coins += f.value;
+                    createCollectEffect(player.x, player.y, f.color);
+                    food.splice(i, 1);
+                    createFood();
+                    updateUI();
+                    localStorage.setItem('snakeCoins', coins);
+                }
+            }
+            
+            // Сбор выстреленной массы
+            ejectedMass.forEach((mass, index) => {
+                const dist = Math.sqrt(Math.pow(player.x - mass.x, 2) + Math.pow(player.y - mass.y, 2));
+                const playerSize = 8 + (player.mass * 0.8);
+                if (dist < mass.size + playerSize) {
+                    player.length += mass.value;
+                    player.mass += mass.value;
+                    score += mass.value * 5;
+                    ejectedMass.splice(index, 1);
+                    updateUI();
+                }
+            });
+            
+            // Обновление выстреленной массы
+            ejectedMass.forEach(mass => {
+                mass.life--;
+                if (mass.life <= 0) {
+                    // Превращается в еду
+                    food.push({
+                        x: mass.x,
+                        y: mass.y,
+                        size: mass.size,
+                        value: mass.value,
+                        color: mass.color
+                    });
+                }
+            });
+            ejectedMass = ejectedMass.filter(m => m.life > 0);
+            
+            // Столкновение с вирусами
+            viruses.forEach((virus, index) => {
+                const dist = Math.sqrt(Math.pow(player.x - virus.x, 2) + Math.pow(player.y - virus.y, 2));
+                const playerSize = 8 + (player.mass * 0.8);
+                if (dist < virus.size + playerSize) {
+                    // Если змейка достаточно большая - разделяется
+                    if (player.mass > 35) {
+                        splitSnake();
+                        createKillEffect(virus.x, virus.y);
+                    } else {
+                        // Иначе просто отталкивает
+                        const angle = Math.atan2(player.y - virus.y, player.x - virus.x);
+                        player.x += Math.cos(angle) * 5;
+                        player.y += Math.sin(angle) * 5;
+                    }
+                }
+            });
+            
+            // Теперь обновляем длину тела после сбора еды
+            // Делаем это постепенно, чтобы избежать резких изменений
+            const targetLength = player.length;
+            while (player.body.length > targetLength) {
+                player.body.pop();
+            }
+            
+            // Убеждаемся, что тело не слишком короткое
+            if (player.body.length < targetLength) {
+                const lastSegment = player.body[player.body.length - 1] || { x: player.x, y: player.y };
+                for (let i = player.body.length; i < targetLength; i++) {
+                    player.body.push({
+                        x: lastSegment.x,
+                        y: lastSegment.y
+                    });
+                }
+            }
+
+            // Движение ботов
+            bots.forEach((bot, botIndex) => {
+                // AI бота - ищет ближайшую еду
+                let nearestFood = null;
+                let minDist = Infinity;
+                food.forEach(f => {
+                    const dist = Math.sqrt(Math.pow(bot.x - f.x, 2) + Math.pow(bot.y - f.y, 2));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestFood = f;
+                    }
+                });
+
+                if (nearestFood) {
+                    const dx = nearestFood.x - bot.x;
+                    const dy = nearestFood.y - bot.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    bot.direction.x = dx / dist;
+                    bot.direction.y = dy / dist;
+                } else {
+                    // Случайное движение
+                    if (Math.random() < 0.05) {
+                        bot.direction.x = Math.random() - 0.5;
+                        bot.direction.y = Math.random() - 0.5;
+                    }
+                }
+
+                bot.x += bot.direction.x * bot.speed;
+                bot.y += bot.direction.y * bot.speed;
+
+                // Границы мира
+                if (bot.x < 0) bot.x = worldWidth;
+                if (bot.x > worldWidth) bot.x = 0;
+                if (bot.y < 0) bot.y = worldHeight;
+                if (bot.y > worldHeight) bot.y = 0;
+
+                // Обновление тела бота
+                bot.body.unshift({ x: bot.x, y: bot.y });
+                while (bot.body.length > bot.length) {
+                    bot.body.pop();
+                }
+
+                // Обновляем уровень и скорость бота
+                bot.mass = bot.length;
+                bot.level = calculateLevel(bot.mass);
+                const botBaseSpeed = 3;
+                const botSpeedMultiplier = Math.max(0.4, 1 - (bot.mass - 5) / 80);
+                bot.speed = botBaseSpeed * botSpeedMultiplier;
+
+                // Бот собирает еду
+                food.forEach((f, index) => {
+                    const dist = Math.sqrt(Math.pow(bot.x - f.x, 2) + Math.pow(bot.y - f.y, 2));
+                    if (dist < f.size + 15) {
+                        bot.length += f.value;
+                        bot.mass += f.value;
+                        bot.level = calculateLevel(bot.mass);
+                        food.splice(index, 1);
+                        createFood();
+                    }
+                });
+            });
+
+            // Столкновения с другими змеями
+            bots.forEach((bot, botIndex) => {
+                // Проверяем столкновение головы игрока с телом бота
+                if (bot.body.length > 0) {
+                    const botHead = bot.body[0];
+                    const distToBotHead = Math.sqrt(Math.pow(player.x - botHead.x, 2) + Math.pow(player.y - botHead.y, 2));
+                    
+                    // Если игрок больше бота - съедаем его
+                    const playerMass = player.mass || player.length;
+                    const botMass = bot.mass || bot.length;
+                    const playerSize = 8 + (playerMass * 0.8);
+                    const botSize = 8 + (botMass * 0.8);
+                    // Увеличиваем порог для поедания бота
+                    if (distToBotHead < (playerSize + botSize) * 0.6 && playerMass > botMass) {
+                        // Игрок съедает бота
+                        const gainedMass = Math.floor(botMass / 2);
+                        player.length += gainedMass;
+                        player.mass += gainedMass;
+                        score += botMass * 5;
+                        coins += gainedMass;
+                        createKillEffect(bot.x, bot.y);
+                        bots[botIndex] = createBot();
+                        updateUI();
+                        localStorage.setItem('snakeCoins', coins);
+                        return; // Выходим из цикла, чтобы не проверять дальше
+                    }
+                    
+                    // Проверяем столкновение с телом бота (только если бот больше игрока)
+                    if (botMass > playerMass) {
+                        bot.body.forEach((segment, index) => {
+                            if (index < 5) return; // Первые сегменты не считаются (увеличено для безопасности)
+                            
+                            const playerSize = 8 + (playerMass * 0.8);
+                            const botSize = 8 + (botMass * 0.8);
+                            const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
+                            
+                            // Увеличиваем порог столкновения с учетом размеров (только реальное столкновение)
+                            // Столкновение только если действительно очень близко
+                            if (dist < (playerSize + botSize) * 0.5) {
+                                if (!activeBoosters.shield) {
+                                    gameOver();
+                                    return;
+                                } else {
+                                    activeBoosters.shield = false;
+                                    createShieldEffect(player.x, player.y);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Столкновение с собственным телом (проверяем только если длина больше 50)
+            // И только если прошло достаточно времени после последнего поедания еды
+            if (player.length > 50 && player.body.length > 50) {
+                // Проверяем только сегменты, которые достаточно далеко от головы
+                // Игнорируем первые 35 сегментов, чтобы избежать ложных срабатываний
+                player.body.forEach((segment, index) => {
+                    if (index < 35) return; // Первые сегменты не считаются (очень большой запас)
+                    
+                    // Проверяем расстояние с учетом размера игрока
+                    const playerSize = 8 + (player.mass * 0.8);
+                    const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
+                    
+                    // Увеличиваем порог столкновения, чтобы избежать ложных срабатываний
+                    // Столкновение только если действительно очень близко (меньше 30% размера)
+                    if (dist < playerSize * 0.3) {
+                        if (!activeBoosters.shield) {
+                            gameOver();
+                            return;
+                        } else {
+                            activeBoosters.shield = false;
+                            createShieldEffect(player.x, player.y);
+                        }
+                    }
+                });
+            }
+
+            // Обновление частей змейки после split
+            updateSnakeParts();
+            
+            // Обновление выстреленной массы (движение)
+            ejectedMass.forEach(mass => {
+                mass.x += mass.vx;
+                mass.y += mass.vy;
+                mass.vx *= 0.98; // Замедление
+                mass.vy *= 0.98;
+            });
+
+            // Обновление эффектов
+            effects = effects.filter(effect => {
+                effect.life--;
+                effect.x += effect.vx || 0;
+                effect.y += effect.vy || 0;
+                effect.alpha = effect.life / effect.maxLife;
+                effect.size *= 0.98;
+                return effect.life > 0;
+            });
+        }
+
+        // Отрисовка
+        function draw() {
+            // Всегда рисуем фон
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Если не играем, не рисуем игровые объекты
+            if (gameState !== 'playing') return;
+
+            // Сетка с учетом камеры
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            const gridStartX = Math.floor(camera.x / 50) * 50;
+            const gridStartY = Math.floor(camera.y / 50) * 50;
+            
+            for (let x = gridStartX; x < camera.x + canvas.width; x += 50) {
+                const screenX = x - camera.x;
+                ctx.beginPath();
+                ctx.moveTo(screenX, 0);
+                ctx.lineTo(screenX, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = gridStartY; y < camera.y + canvas.height; y += 50) {
+                const screenY = y - camera.y;
+                ctx.beginPath();
+                ctx.moveTo(0, screenY);
+                ctx.lineTo(canvas.width, screenY);
+                ctx.stroke();
+            }
+
+            // Еда (красивые яблоки/фрукты) с учетом камеры
+            food.forEach(f => {
+                const screenX = f.x - camera.x;
+                const screenY = f.y - camera.y;
+                
+                // Проверка видимости
+                if (screenX < -50 || screenX > canvas.width + 50 || 
+                    screenY < -50 || screenY > canvas.height + 50) return;
+                
+                const pulse = Math.sin(gameFrame * 0.15 + f.x * 0.1) * 1.5;
+                const size = f.size + pulse;
+                
+                // Основной цвет
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Блик
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.beginPath();
+                ctx.arc(screenX - size * 0.3, screenY - size * 0.3, size * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Обводка
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Боты (только видимые)
+            bots.forEach(bot => {
+                const botScreenX = bot.x - camera.x;
+                const botScreenY = bot.y - camera.y;
+                if (botScreenX > -100 && botScreenX < canvas.width + 100 &&
+                    botScreenY > -100 && botScreenY < canvas.height + 100) {
+                    // Размер бота зависит от массы (более заметная зависимость)
+                    const botMass = bot.mass || bot.length;
+                    const botSize = 8 + (botMass * 0.8); // Увеличена зависимость от массы
+                    drawSnake(bot.body, bot.color, false, bot.headType, bot.direction, botSize);
+                    // Ник бота с уровнем
+                    if (bot.body.length > 0) {
+                        const headScreenX = bot.body[0].x - camera.x;
+                        const headScreenY = bot.body[0].y - camera.y;
+                        drawName(headScreenX, headScreenY - 25, bot.name, bot.color, bot.level || calculateLevel(botMass));
+                    }
+                }
+            });
+
+            // Вирусы (препятствия) с учетом камеры
+            viruses.forEach(virus => {
+                const screenX = virus.x - camera.x;
+                const screenY = virus.y - camera.y;
+                
+                if (screenX < -100 || screenX > canvas.width + 100 || 
+                    screenY < -100 || screenY > canvas.height + 100) return;
+                
+                // Рисуем вирус с шипами
+                ctx.fillStyle = virus.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, virus.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Шипы
+                ctx.strokeStyle = '#00cc00';
+                ctx.lineWidth = 3;
+                for (let i = 0; i < virus.spikes; i++) {
+                    const angle = (Math.PI * 2 / virus.spikes) * i + gameFrame * 0.02;
+                    const spikeX = screenX + Math.cos(angle) * virus.size;
+                    const spikeY = screenY + Math.sin(angle) * virus.size;
+                    ctx.beginPath();
+                    ctx.moveTo(screenX, screenY);
+                    ctx.lineTo(spikeX, spikeY);
+                    ctx.stroke();
+                }
+                
+                // Обводка
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+            
+            // Выстреленная масса
+            ejectedMass.forEach(mass => {
+                const screenX = mass.x - camera.x;
+                const screenY = mass.y - camera.y;
+                
+                if (screenX < -50 || screenX > canvas.width + 50 || 
+                    screenY < -50 || screenY > canvas.height + 50) return;
+                
+                ctx.fillStyle = mass.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, mass.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+            
+            // Игрок
+            if (player && player.body && player.body.length > 0) {
+                // Размер зависит от массы (более заметная зависимость)
+                const playerSize = 8 + (player.mass * 0.8); // Увеличена зависимость от массы
+                drawSnake(player.body, player.color, true, player.headType, player.direction, playerSize);
+                // Ник игрока
+                const headScreenX = player.body[0].x - camera.x;
+                const headScreenY = player.body[0].y - camera.y;
+                drawName(headScreenX, headScreenY - 25, player.name || 'Вы', player.color, player.level);
+            }
+            
+            // Части змейки после split
+            player.parts.forEach(part => {
+                if (part.body.length > 0) {
+                    const partSize = 8 + (part.mass * 0.8); // Увеличена зависимость от массы
+                    const partScreenX = part.body[0].x - camera.x;
+                    const partScreenY = part.body[0].y - camera.y;
+                    if (partScreenX > -100 && partScreenX < canvas.width + 100 &&
+                        partScreenY > -100 && partScreenY < canvas.height + 100) {
+                        drawSnake(part.body, part.color, false, part.headType, part.direction, partSize);
+                        const partLevel = calculateLevel(part.mass);
+                        drawName(partScreenX, partScreenY - 25, part.name, part.color, partLevel);
+                    }
+                }
+            });
+            
+            // Мини-карта
+            drawMinimap();
+            
+            // Топ-3
+            updateTop3();
+
+            // Эффекты (с учетом камеры)
+            effects.forEach(effect => {
+                const screenX = effect.x - camera.x;
+                const screenY = effect.y - camera.y;
+                
+                // Проверка видимости
+                if (screenX < -50 || screenX > canvas.width + 50 || 
+                    screenY < -50 || screenY > canvas.height + 50) return;
+                
+                ctx.save();
+                ctx.globalAlpha = effect.alpha;
+                ctx.fillStyle = effect.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, effect.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = effect.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            });
+        }
+
+        function drawSnake(body, color, isPlayer, headType = 'dragon', direction = { x: 1, y: 0 }, baseSize = null) {
+            const defaultSize = isPlayer ? 16 : 13;
+            const segmentSize = baseSize || defaultSize;
+            
+            body.forEach((segment, index) => {
+                // Размер уменьшается к хвосту
+                const size = segmentSize * (1 - (index / body.length) * 0.3);
+                const alpha = 1 - (index / body.length) * 0.4;
+                
+                // Переводим в экранные координаты
+                const screenX = segment.x - camera.x;
+                const screenY = segment.y - camera.y;
+                
+                // Проверка видимости
+                if (screenX < -50 || screenX > canvas.width + 50 || 
+                    screenY < -50 || screenY > canvas.height + 50) return;
+                
+                if (color === 'rainbow') {
+                    const hue = (gameFrame * 3 + index * 8) % 360;
+                    ctx.fillStyle = `hsl(${hue}, 70%, 55%)`;
+                } else {
+                    ctx.fillStyle = color;
+                }
+                
+                ctx.globalAlpha = alpha;
+                
+                // Основной круг
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Обводка (более мягкая)
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Внутренний круг для объема
+                if (index < body.length * 0.7) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(screenX - size * 0.3, screenY - size * 0.3, size * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Голова с разными стилями
+                if (index === 0) {
+                    drawHead(screenX, screenY, headType, direction, size);
+                }
+                
+                ctx.globalAlpha = 1;
+            });
+        }
+        
+        function drawHead(x, y, headType, direction, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Определяем угол поворота
+            let angle = 0;
+            if (direction.x !== 0 || direction.y !== 0) {
+                angle = Math.atan2(direction.y, direction.x);
+            }
+            ctx.rotate(angle);
+            
+            switch(headType) {
+                case 'dragon':
+                    // Дракон - рога и чешуя
+                    ctx.fillStyle = '#E74C3C';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Рога
+                    ctx.fillStyle = '#C0392B';
+                    ctx.beginPath();
+                    ctx.moveTo(-size * 0.5, -size);
+                    ctx.lineTo(-size * 0.3, -size * 1.5);
+                    ctx.lineTo(-size * 0.1, -size);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(size * 0.5, -size);
+                    ctx.lineTo(size * 0.3, -size * 1.5);
+                    ctx.lineTo(size * 0.1, -size);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'knight':
+                    // Рыцарь - шлем
+                    ctx.fillStyle = '#34495E';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Шлем
+                    ctx.fillStyle = '#2C3E50';
+                    ctx.beginPath();
+                    ctx.arc(0, -size * 0.3, size * 0.8, 0, Math.PI, true);
+                    ctx.fill();
+                    // Забрало
+                    ctx.strokeStyle = '#1A1A1A';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-size * 0.3, -size * 0.5);
+                    ctx.lineTo(size * 0.3, -size * 0.5);
+                    ctx.stroke();
+                    // Глаза
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.3, -size * 0.3, 2, 0, Math.PI * 2);
+                    ctx.arc(size * 0.3, -size * 0.3, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'tiger':
+                    // Тигр - полоски
+                    ctx.fillStyle = '#F39C12';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Полоски
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(-size * 0.8, -size * 0.3, size * 0.3, size * 0.2);
+                    ctx.fillRect(size * 0.5, -size * 0.3, size * 0.3, size * 0.2);
+                    // Уши
+                    ctx.fillStyle = '#E67E22';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.6, -size * 0.8, size * 0.4, 0, Math.PI * 2);
+                    ctx.arc(size * 0.6, -size * 0.8, size * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#FFF';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 1.5, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'wolf':
+                    // Волк - заостренные уши
+                    ctx.fillStyle = '#95A5A6';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Уши
+                    ctx.fillStyle = '#7F8C8D';
+                    ctx.beginPath();
+                    ctx.moveTo(-size * 0.5, -size);
+                    ctx.lineTo(-size * 0.2, -size * 1.3);
+                    ctx.lineTo(0, -size * 0.8);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(size * 0.5, -size);
+                    ctx.lineTo(size * 0.2, -size * 1.3);
+                    ctx.lineTo(0, -size * 0.8);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#E74C3C';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 2.5, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'eagle':
+                    // Орел - клюв
+                    ctx.fillStyle = '#8B4513';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Клюв
+                    ctx.fillStyle = '#FFA500';
+                    ctx.beginPath();
+                    ctx.moveTo(size, 0);
+                    ctx.lineTo(size * 1.5, size * 0.3);
+                    ctx.lineTo(size, size * 0.2);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.3, 3, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.3, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'lion':
+                    // Лев - грива
+                    ctx.fillStyle = '#F39C12';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Грива
+                    ctx.fillStyle = '#E67E22';
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (Math.PI * 2 / 8) * i;
+                        const px = Math.cos(angle) * size;
+                        const py = Math.sin(angle) * size;
+                        ctx.beginPath();
+                        ctx.arc(px, py, size * 0.4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    // Глаза
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 2, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                case 'bear':
+                    // Медведь - круглые уши
+                    ctx.fillStyle = '#8B4513';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Уши
+                    ctx.fillStyle = '#654321';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.6, -size * 0.7, size * 0.4, 0, Math.PI * 2);
+                    ctx.arc(size * 0.6, -size * 0.7, size * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 2.5, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                    
+                default: // snake или другие
+                    // Простая змея
+                    ctx.fillStyle = '#2ECC71';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Глаза
+                    ctx.fillStyle = '#FFF';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(-size * 0.4, -size * 0.2, 1.5, 0, Math.PI * 2);
+                    ctx.arc(size * 0.4, -size * 0.2, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawName(x, y, name, color, level = null) {
+            ctx.save();
+            
+            // Текст с уровнем
+            const displayText = level !== null ? `Lv.${level} ${name}` : name;
+            
+            // Фон для текста
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            const textWidth = ctx.measureText(displayText).width;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(x - textWidth / 2 - 5, y - 12, textWidth + 10, 16);
+            
+            // Текст
+            ctx.fillStyle = color;
+            ctx.fillText(displayText, x, y);
+            
+            ctx.restore();
+        }
+        
+        function drawMinimap() {
+            if (!minimapCanvas || !minimapCtx) return;
+            
+            if (gameState !== 'playing') {
+                minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+                return;
+            }
+            
+            minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            
+            const scaleX = minimapCanvas.width / worldWidth;
+            const scaleY = minimapCanvas.height / worldHeight;
+            
+            // Еда на мини-карте
+            minimapCtx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            food.forEach(f => {
+                const mx = f.x * scaleX;
+                const my = f.y * scaleY;
+                minimapCtx.fillRect(mx - 1, my - 1, 2, 2);
+            });
+            
+            // Боты на мини-карте
+            bots.forEach(bot => {
+                if (bot.body.length > 0) {
+                    const mx = bot.body[0].x * scaleX;
+                    const my = bot.body[0].y * scaleY;
+                    minimapCtx.fillStyle = bot.color;
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(mx, my, 2, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+            
+            // Игрок на мини-карте
+            if (player.body.length > 0) {
+                const mx = player.body[0].x * scaleX;
+                const my = player.body[0].y * scaleY;
+                minimapCtx.fillStyle = '#2ECC71';
+                minimapCtx.beginPath();
+                minimapCtx.arc(mx, my, 3, 0, Math.PI * 2);
+                minimapCtx.fill();
+                
+                // Область видимости
+                minimapCtx.strokeStyle = 'rgba(46, 204, 113, 0.3)';
+                minimapCtx.lineWidth = 1;
+                minimapCtx.beginPath();
+                const viewScaleX = canvas.width * scaleX / worldWidth;
+                const viewScaleY = canvas.height * scaleY / worldHeight;
+                minimapCtx.rect(mx - viewScaleX / 2, my - viewScaleY / 2, viewScaleX, viewScaleY);
+                minimapCtx.stroke();
+            }
+        }
+        
+        function updateTop3() {
+            const top3List = document.getElementById('top3List');
+            if (gameState !== 'playing') {
+                top3List.innerHTML = '';
+                return;
+            }
+            
+            const allSnakes = [
+                { length: player.mass || player.length, name: player.name, isPlayer: true },
+                ...bots.map(b => ({ length: b.length, name: b.name, isPlayer: false }))
+            ];
+            allSnakes.sort((a, b) => b.length - a.length);
+            top3List.innerHTML = '';
+            
+            for (let i = 0; i < Math.min(3, allSnakes.length); i++) {
+                const snake = allSnakes[i];
+                const item = document.createElement('div');
+                item.className = `top3-item rank${i + 1}`;
+                item.textContent = `${i + 1}. ${snake.name} (${snake.length})`;
+                if (snake.isPlayer) {
+                    item.style.color = '#2ECC71';
+                    item.style.fontWeight = 'bold';
+                }
+                top3List.appendChild(item);
+            }
+        }
+
+        // Эффекты
+        function createCollectEffect(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                const angle = (Math.PI * 2 / 8) * i;
+                effects.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * 2,
+                    vy: Math.sin(angle) * 2,
+                    life: 20,
+                    maxLife: 20,
+                    size: 5,
+                    color: color,
+                    alpha: 1
+                });
+            }
+        }
+
+        function createKillEffect(x, y) {
+            for (let i = 0; i < 30; i++) {
+                const angle = (Math.PI * 2 / 30) * i;
+                effects.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * 4,
+                    vy: Math.sin(angle) * 4,
+                    life: 40,
+                    maxLife: 40,
+                    size: 8,
+                    color: '#ff3333',
+                    alpha: 1
+                });
+            }
+        }
+
+        function createShieldEffect(x, y) {
+            for (let i = 0; i < 15; i++) {
+                const angle = (Math.PI * 2 / 15) * i;
+                effects.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * 3,
+                    vy: Math.sin(angle) * 3,
+                    life: 30,
+                    maxLife: 30,
+                    size: 6,
+                    color: '#00ffff',
+                    alpha: 1
+                });
+            }
+        }
+
+        // Игровой цикл
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Запуск игрового цикла
+        gameLoop();
+        console.log('Game loop started');
+
+        // Управление
+        let currentDirection = { x: 1, y: 0 };
+
+        function setDirection(dx, dy) {
+            if (gameState !== 'playing') return;
+            
+            // Нормализация направления (для плавного движения в любую сторону)
+            const length = Math.sqrt(dx * dx + dy * dy);
+            if (length > 0) {
+                dx = dx / length;
+                dy = dy / length;
+            } else {
+                return; // Нулевое направление
+            }
+            
+            // Нельзя развернуться на 180 градусов (защита от случайного разворота)
+            const dotProduct = currentDirection.x * dx + currentDirection.y * dy;
+            if (dotProduct < -0.8) return; // Угол больше 135 градусов
+            
+            currentDirection = { x: dx, y: dy };
+            player.direction = { x: dx, y: dy };
+        }
+
+        // Джойстик
+        function updateJoystick(x, y) {
+            const rect = joystickBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > joystickRadius) {
+                joystickX = (dx / distance) * joystickRadius;
+                joystickY = (dy / distance) * joystickRadius;
+            } else {
+                joystickX = dx;
+                joystickY = dy;
+            }
+            
+            joystickHandle.style.transform = `translate(calc(-50% + ${joystickX}px), calc(-50% + ${joystickY}px))`;
+            
+            // Обновление направления (в любую сторону, 360 градусов)
+            if (distance > 10) {
+                const angle = Math.atan2(joystickY, joystickX);
+                const dirX = Math.cos(angle);
+                const dirY = Math.sin(angle);
+                
+                // Плавное движение в любом направлении
+                setDirection(dirX, dirY);
+            }
+        }
+        
+        function resetJoystick() {
+            joystickX = 0;
+            joystickY = 0;
+            joystickHandle.style.transform = 'translate(-50%, -50%)';
+            joystickHandle.classList.remove('active');
+            joystickActive = false;
+        }
+        
+        // События джойстика
+        joystickBase.addEventListener('mousedown', (e) => {
+            if (gameState !== 'playing') return;
+            joystickActive = true;
+            joystickHandle.classList.add('active');
+            updateJoystick(e.clientX, e.clientY);
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (joystickActive && gameState === 'playing') {
+                updateJoystick(e.clientX, e.clientY);
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (joystickActive) {
+                resetJoystick();
+            }
+        });
+        
+        // Touch события
+        joystickBase.addEventListener('touchstart', (e) => {
+            if (gameState !== 'playing') return;
+            e.preventDefault();
+            joystickActive = true;
+            joystickHandle.classList.add('active');
+            const touch = e.touches[0];
+            updateJoystick(touch.clientX, touch.clientY);
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (joystickActive && gameState === 'playing') {
+                e.preventDefault();
+                const touch = e.touches[0];
+                updateJoystick(touch.clientX, touch.clientY);
+            }
+        });
+        
+        document.addEventListener('touchend', () => {
+            if (joystickActive) {
+                resetJoystick();
+            }
+        });
+
+        // Свайпы
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        canvas.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (gameState !== 'playing') return;
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            
+            // Плавное движение в любом направлении (если свайп достаточно большой)
+            if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+                setDirection(dx, dy);
+            }
+        });
+
+        // Клавиатура (WASD для плавного движения в любую сторону)
+        document.addEventListener('keydown', (e) => {
+            if (gameState !== 'playing') return;
+            let dirX = 0;
+            let dirY = 0;
+            
+            switch(e.key.toLowerCase()) {
+                case 'w':
+                case 'arrowup': dirY = -1; break;
+                case 's':
+                case 'arrowdown': dirY = 1; break;
+                case 'a':
+                case 'arrowleft': dirX = -1; break;
+                case 'd':
+                case 'arrowright': dirX = 1; break;
+            }
+            
+            // Комбинации для диагонального движения
+            if (dirX !== 0 || dirY !== 0) {
+                setDirection(dirX, dirY);
+            }
+        });
+
+        // Магазин
+        function buyCrystals(amount) {
+            if (tg && tg.initDataUnsafe) {
+                crystals += amount;
+                updateUI();
+                localStorage.setItem('snakeCrystals', crystals);
+                alert(`Получено ${amount} кристаллов! (В реальной версии будет оплата)`);
+            } else {
+                crystals += amount;
+                updateUI();
+                localStorage.setItem('snakeCrystals', crystals);
+                alert(`Получено ${amount} кристаллов! (Тестовый режим)`);
+            }
+        }
+
+        function buyHeadType(headType, price) {
+            if (crystals < price) {
+                alert('Недостаточно кристаллов!');
+                return;
+            }
+            crystals -= price;
+            player.headType = headType;
+            currentSkin = headType;
+            updateUI();
+            localStorage.setItem('snakeCrystals', crystals);
+            localStorage.setItem('snakeSkin', headType);
+            alert('Стиль головы применен!');
+        }
+
+        function buyBooster(type, price) {
+            if (crystals < price) {
+                alert('Недостаточно кристаллов!');
+                return;
+            }
+            crystals -= price;
+            if (type === 'speed') {
+                activeBoosters.speed = 1800; // 30 секунд
+            } else if (type === 'shield') {
+                activeBoosters.shield = true;
+            }
+            updateUI();
+            localStorage.setItem('snakeCrystals', crystals);
+            alert('Бустер активирован!');
+        }
+        
+        function changePlayerName() {
+            const nameInput = document.getElementById('changeNameInput');
+            if (!nameInput) return;
+            
+            const newName = nameInput.value.trim();
+            if (newName.length > 0 && newName.length <= 15) {
+                player.name = newName;
+                localStorage.setItem('playerName', newName);
+                alert('Ник изменен на: ' + newName);
+                updateUI();
+                
+                // Обновляем поле ввода на стартовом экране
+                const startNameInput = document.getElementById('playerNameInput');
+                if (startNameInput) {
+                    startNameInput.value = newName;
+                }
+            } else {
+                alert('Ник должен быть от 1 до 15 символов!');
+            }
+        }
+
+        // Инициализация кнопок
+        function initButtons() {
+            startBtn = document.getElementById('startBtn');
+            restartBtn = document.getElementById('restartBtn');
+            shopBtn = document.getElementById('shopBtn');
+            shopBtn2 = document.getElementById('shopBtn2');
+            closeShopBtn = document.getElementById('closeShopBtn');
+            finalScoreEl = document.getElementById('finalScore');
+            finalRankEl = document.getElementById('finalRank');
+            
+            // Загружаем сохраненный ник в поле ввода
+            const nameInput = document.getElementById('playerNameInput');
+            if (nameInput) {
+                const savedName = localStorage.getItem('playerName') || '';
+                nameInput.value = savedName;
+            }
+            
+            if (startBtn) {
+                startBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Start button clicked');
+                    
+                    // Получаем ник из поля ввода
+                    const nameInput = document.getElementById('playerNameInput');
+                    const playerName = nameInput ? (nameInput.value.trim() || 'Вы') : 'Вы';
+                    if (playerName.length > 0) {
+                        player.name = playerName;
+                        localStorage.setItem('playerName', playerName);
+                    }
+                    
+                    console.log('Before: gameState =', gameState);
+                    gameState = 'playing';
+                    console.log('After: gameState =', gameState);
+                    initGame();
+                    console.log('initGame called, player:', player);
+                    startScreen.classList.add('hidden');
+                    console.log('startScreen hidden');
+                    updateUI();
+                });
+            } else {
+                console.error('startBtn not found');
+            }
+
+            if (restartBtn) {
+                restartBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Restart button clicked');
+                    gameState = 'playing';
+                    initGame();
+                    gameOverScreen.classList.remove('show');
+                });
+            } else {
+                console.error('restartBtn not found');
+            }
+
+            if (shopBtn) {
+                shopBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Shop button clicked');
+                    shopScreen.classList.add('show');
+                });
+            } else {
+                console.error('shopBtn not found');
+            }
+
+            if (shopBtn2) {
+                shopBtn2.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Shop button 2 clicked');
+                    shopScreen.classList.add('show');
+                });
+            } else {
+                console.error('shopBtn2 not found');
+            }
+
+            if (closeShopBtn) {
+                closeShopBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Close shop button clicked');
+                    shopScreen.classList.remove('show');
+                });
+            } else {
+                console.error('closeShopBtn not found');
+            }
+        }
+        
+        // Функции Split и Eject Mass
+        function splitSnake() {
+            if (player.splitCooldown > 0 || player.mass < 35) return;
+            
+            player.splitCooldown = 300; // 5 секунд кулдаун (60 FPS)
+            
+            // Разделяем змейку пополам
+            const halfMass = Math.floor(player.mass / 2);
+            const halfLength = Math.floor(player.length / 2);
+            
+            // Создаем новую часть
+            const newPart = {
+                x: player.x - player.direction.x * 50,
+                y: player.y - player.direction.y * 50,
+                body: player.body.slice(halfLength),
+                direction: { x: -player.direction.x, y: -player.direction.y },
+                speed: player.speed * 1.5, // Быстрее после разделения
+                length: halfLength,
+                mass: halfMass,
+                color: player.color,
+                headType: player.headType,
+                name: player.name,
+                mergeTimer: 300 // Таймер для слияния обратно
+            };
+            
+            // Уменьшаем основную змейку
+            player.mass = halfMass;
+            player.length = halfLength;
+            player.body = player.body.slice(0, halfLength);
+            
+            // Добавляем в части
+            player.parts.push(newPart);
+            
+            createKillEffect(player.x, player.y);
+        }
+        
+        function ejectMass() {
+            if (player.ejectCooldown > 0 || player.mass < 10) return;
+            
+            player.ejectCooldown = 30; // 0.5 секунды кулдаун
+            
+            // Выстреливаем часть массы
+            const ejectValue = 3;
+            player.mass -= ejectValue;
+            player.length = Math.max(5, player.length - ejectValue);
+            
+            // Создаем выстреленную массу
+            const angle = Math.atan2(player.direction.y, player.direction.x);
+            ejectedMass.push({
+                x: player.x + Math.cos(angle) * 30,
+                y: player.y + Math.sin(angle) * 30,
+                vx: Math.cos(angle) * 5,
+                vy: Math.sin(angle) * 5,
+                size: 8,
+                value: ejectValue,
+                color: player.color,
+                life: 600 // 10 секунд жизни
+            });
+            
+            updateUI();
+        }
+        
+        // Обновление частей змейки после split
+        function updateSnakeParts() {
+            player.parts.forEach((part, index) => {
+                // Движение части
+                part.x += part.direction.x * part.speed;
+                part.y += part.direction.y * part.speed;
+                
+                // Обновление тела
+                part.body.unshift({ x: part.x, y: part.y });
+                while (part.body.length > part.length) {
+                    part.body.pop();
+                }
+                
+                // Уменьшение таймера слияния
+                part.mergeTimer--;
+                if (part.mergeTimer <= 0) {
+                    // Слияние обратно
+                    const dist = Math.sqrt(Math.pow(player.x - part.x, 2) + Math.pow(player.y - part.y, 2));
+                    if (dist < 50) {
+                        player.mass += part.mass;
+                        player.length += part.length;
+                        player.parts.splice(index, 1);
+                        updateUI();
+                    }
+                }
+                
+                // Отрисовка части
+                if (part.body.length > 0) {
+                    drawSnake(part.body, part.color, false, part.headType, part.direction);
+                }
+            });
+        }
+        
+        // Инициализация кнопок Split и Eject
+        function initActionButtons() {
+            const splitBtn = document.getElementById('splitBtn');
+            const ejectBtn = document.getElementById('ejectBtn');
+            
+            if (splitBtn) {
+                splitBtn.addEventListener('click', () => {
+                    if (gameState === 'playing') {
+                        splitSnake();
+                    }
+                });
+            }
+            
+            if (ejectBtn) {
+                let ejectInterval = null;
+                ejectBtn.addEventListener('mousedown', () => {
+                    if (gameState === 'playing') {
+                        ejectMass();
+                        ejectInterval = setInterval(() => {
+                            if (gameState === 'playing') {
+                                ejectMass();
+                            }
+                        }, 100);
+                    }
+                });
+                
+                ejectBtn.addEventListener('mouseup', () => {
+                    if (ejectInterval) {
+                        clearInterval(ejectInterval);
+                        ejectInterval = null;
+                    }
+                });
+                
+                ejectBtn.addEventListener('mouseleave', () => {
+                    if (ejectInterval) {
+                        clearInterval(ejectInterval);
+                        ejectInterval = null;
+                    }
+                });
+            }
+        }
+        
+        // Инициализация при загрузке
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                initButtons();
+                initActionButtons();
+            });
+        } else {
+            initButtons();
+            initActionButtons();
+        }
+
+        // Конец игры
+        function gameOver() {
+            // Проверяем, что игра действительно идет (защита от повторных вызовов)
+            if (gameState === 'gameover') return;
+            
+            gameState = 'gameover';
+            const playerMass = player.mass || player.length;
+            const allSnakes = [{ length: playerMass, isPlayer: true }, ...bots.map(b => ({ length: b.mass || b.length, isPlayer: false }))];
+            allSnakes.sort((a, b) => b.length - a.length);
+            const rank = allSnakes.findIndex(s => s.isPlayer) + 1;
+            
+            if (finalScoreEl) finalScoreEl.textContent = `Длина: ${player.length}`;
+            if (finalRankEl) finalRankEl.textContent = `Место: #${rank}`;
+            if (gameOverScreen) gameOverScreen.classList.add('show');
+        }
+    </script>
+</body>
+</html>
+

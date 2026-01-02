@@ -1737,6 +1737,20 @@
                 }
             });
             
+            // Онлайн игроки на мини-карте
+            if (isOnline) {
+                Object.values(onlinePlayers).forEach(onlinePlayer => {
+                    if (onlinePlayer && onlinePlayer.body && onlinePlayer.body.length > 0) {
+                        const mx = onlinePlayer.body[0].x * scaleX;
+                        const my = onlinePlayer.body[0].y * scaleY;
+                        minimapCtx.fillStyle = onlinePlayer.color || '#3498DB';
+                        minimapCtx.beginPath();
+                        minimapCtx.arc(mx, my, 2, 0, Math.PI * 2);
+                        minimapCtx.fill();
+                    }
+                });
+            }
+            
             // Игрок на мини-карте
             if (player.body.length > 0) {
                 const mx = player.body[0].x * scaleX;
@@ -1764,10 +1778,10 @@
                 return;
             }
             
-            // Собираем всех змей: игрок, боты и онлайн игроки
+            // Собираем только реальных игроков (себя и онлайн игроков) - БЕЗ ботов!
+            // Боты у разных игроков могут быть разные, поэтому их не включаем в топ-3
             const allSnakes = [
-                { length: player.mass || player.length, name: player.name, isPlayer: true, isOnline: false },
-                ...bots.map(b => ({ length: b.mass || b.length, name: b.name, isPlayer: false, isOnline: false }))
+                { length: player.mass || player.length, name: player.name, isPlayer: true, isOnline: false }
             ];
             
             // Добавляем онлайн игроков
@@ -2561,6 +2575,9 @@
                     if (bots.length > 0) {
                         bots.splice(0, 1); // Удаляем первого бота
                     }
+                    
+                    // Обновляем топ-3 при присоединении нового игрока
+                    updateTop3();
                 }
             });
             
@@ -2575,9 +2592,15 @@
                     
                     onlinePlayers[id].x = data.x;
                     onlinePlayers[id].y = data.y;
+                    const oldMass = onlinePlayers[id].mass;
                     onlinePlayers[id].mass = data.mass || onlinePlayers[id].mass;
                     onlinePlayers[id].level = data.level || onlinePlayers[id].level;
                     onlinePlayers[id].length = data.length || onlinePlayers[id].length;
+                    
+                    // Обновляем топ-3 при изменении массы онлайн игрока
+                    if (oldMass !== onlinePlayers[id].mass) {
+                        updateTop3();
+                    }
                     
                     // Обновляем направление
                     if (data.directionX !== undefined && data.directionY !== undefined) {
@@ -2623,6 +2646,9 @@
                     if (bots.length < maxBots && onlinePlayerCount < maxBots) {
                         bots.push(createBot());
                     }
+                    
+                    // Обновляем топ-3 при выходе игрока
+                    updateTop3();
                 }
             });
         }

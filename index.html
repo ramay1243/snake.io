@@ -304,9 +304,15 @@
             lengthEl.textContent = `Уровень: ${player.level || 1} | Масса: ${Math.floor(player.mass || player.length)}`;
             scoreEl.textContent = `Очки: ${score}`;
             
-            // Ранк (показываем место среди ботов)
+            // Ранк (показываем место среди онлайн игроков)
             const playerMass = player.mass || player.length;
-            const allSnakes = [{ length: playerMass, isPlayer: true }, ...bots.map(b => ({ length: b.length, isPlayer: false }))];
+            const allSnakes = [{ length: playerMass, isPlayer: true }];
+            // Добавляем онлайн игроков
+            Object.values(onlinePlayers).forEach(op => {
+                if (op && op.mass) {
+                    allSnakes.push({ length: op.mass, isPlayer: false, name: op.name });
+                }
+            });
             allSnakes.sort((a, b) => b.length - a.length);
             const rank = allSnakes.findIndex(s => s.isPlayer) + 1;
             rankEl.textContent = `Место: #${rank}`;
@@ -358,12 +364,8 @@
             camera.x = player.x - canvas.width / 2;
             camera.y = player.y - canvas.height / 2;
 
-            // Боты (уменьшено для производительности на мобильных)
+            // Боты убраны - только онлайн игроки
             bots = [];
-            const botCount = window.innerWidth < 500 ? 8 : 12; // Меньше ботов на мобильных
-            for (let i = 0; i < botCount; i++) {
-                bots.push(createBot());
-            }
 
             // Еда (больше еды для более интересного геймплея)
             food = [];
@@ -711,7 +713,8 @@
                 }
             }
 
-            // Движение ботов
+            // Боты убраны - только онлайн игроки
+            /*
             bots.forEach((bot, botIndex) => {
                 // AI бота - ищет ближайшую еду
                 let nearestFood = null;
@@ -797,8 +800,10 @@
                     }
                 });
             });
+            */
 
-            // ПРОСТАЯ И НАДЕЖНАЯ ЛОГИКА: Касание голов - выше уровень убивает ниже уровень
+            // Боты убраны - столкновения только с онлайн игроками
+            /*
             bots.forEach((bot, botIndex) => {
                 if (!bot || !bot.body || bot.body.length === 0) return;
                 
@@ -880,12 +885,14 @@
                     }
                 }
             });
+            */
 
             // Столкновение с собственным телом ОТКЛЮЧЕНО
             // Игрок никогда не умирает от столкновения с собственным телом
             // (код проверки самостолкновения удален по запросу пользователя)
 
-            // Столкновения между ботами (боты могут съедать друг друга при касании голов)
+            // Боты убраны - столкновения между ботами удалены
+            /*
             bots.forEach((bot1, bot1Index) => {
                 if (bot1.body.length === 0) return;
                 const bot1Head = bot1.body[0];
@@ -1073,7 +1080,8 @@
                 ctx.stroke();
             });
 
-            // Боты (только видимые)
+            // Боты убраны - только онлайн игроки
+            /*
             bots.forEach(bot => {
                 // Проверка видимости (в игровых координатах)
                 if (bot.x > camera.x - 100 && bot.x < camera.x + viewWidth + 100 &&
@@ -1088,6 +1096,7 @@
                     }
                 }
             });
+            */
 
             // Вирусы (препятствия) с учетом камеры
             viruses.forEach(virus => {
@@ -1719,17 +1728,7 @@
                 minimapCtx.fillRect(mx - 1, my - 1, 2, 2);
             });
             
-            // Боты на мини-карте
-            bots.forEach(bot => {
-                if (bot.body.length > 0) {
-                    const mx = bot.body[0].x * scaleX;
-                    const my = bot.body[0].y * scaleY;
-                    minimapCtx.fillStyle = bot.color;
-                    minimapCtx.beginPath();
-                    minimapCtx.arc(mx, my, 2, 0, Math.PI * 2);
-                    minimapCtx.fill();
-                }
-            });
+            // Боты убраны - только онлайн игроки на мини-карте
             
             // Игрок на мини-карте
             if (player.body.length > 0) {

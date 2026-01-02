@@ -1980,9 +1980,8 @@
         function connectToGame() {
             if (!firebaseDatabase || !isOnline) return;
             
-            // Отправляем уведомление о присоединении
+            // НЕ показываем уведомление о себе - только о других игроках
             const playerName = player.name || 'Игрок';
-            showNotification(`${playerName} присоединился!`, 5000);
             
             // Отправляем информацию о себе в Firebase
             firebaseDatabase.ref('players/' + playerId).set({
@@ -1998,11 +1997,51 @@
                 timestamp: Date.now()
             });
             
-            // Слушаем изменения других игроков
+            // Сначала загружаем всех существующих игроков БЕЗ уведомлений
+            firebaseDatabase.ref('players').once('value', (snapshot) => {
+                snapshot.forEach((childSnapshot) => {
+                    const data = childSnapshot.val();
+                    const id = childSnapshot.key;
+                    
+                    if (id !== playerId && !onlinePlayers[id]) {
+                        // Создаем начальное тело для онлайн игрока
+                        const initialBody = [];
+                        const bodyLength = Math.max(5, Math.floor(data.mass || 5));
+                        for (let i = 0; i < bodyLength; i++) {
+                            initialBody.push({
+                                x: (data.x || 0) - i * 20,
+                                y: (data.y || 0)
+                            });
+                        }
+                        
+                        onlinePlayers[id] = {
+                            id: id,
+                            name: data.name,
+                            x: data.x || 0,
+                            y: data.y || 0,
+                            mass: data.mass || 5,
+                            level: data.level || 1,
+                            color: data.color || '#2ECC71',
+                            direction: { 
+                                x: data.directionX || 1, 
+                                y: data.directionY || 0 
+                            },
+                            length: data.length || 5,
+                            body: initialBody,
+                            lastUpdate: Date.now()
+                        };
+                        // НЕ показываем уведомление для уже существующих игроков
+                    }
+                });
+            });
+            
+            // Теперь слушаем только НОВЫХ игроков (которые присоединились после нас)
             firebaseDatabase.ref('players').on('child_added', (snapshot) => {
                 const data = snapshot.val();
                 const id = snapshot.key;
                 
+                // Показываем уведомление только если это действительно новый игрок
+                // (не мы, не был в списке, и присоединился после нашей загрузки)
                 if (id !== playerId && !onlinePlayers[id]) {
                     // Создаем начальное тело для онлайн игрока
                     const initialBody = [];
@@ -2031,7 +2070,7 @@
                         lastUpdate: Date.now()
                     };
                     
-                    // Показываем уведомление о присоединении другого игрока
+                    // Показываем уведомление о присоединении другого игрока (только один раз)
                     showNotification(`${data.name} присоединился!`, 5000);
                 }
             });

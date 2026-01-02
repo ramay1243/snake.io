@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Snake.io - Выживание</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Firebase для онлайн режима -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,6 +31,9 @@
                 <div id="top3List"></div>
             </div>
             
+            <!-- Уведомления -->
+            <div id="notifications"></div>
+            
             <!-- Джойстик -->
             <div id="joystick">
                 <div id="joystickBase">
@@ -39,6 +45,7 @@
             <div id="actionButtons">
                 <button id="splitBtn" class="action-btn" title="Разделиться (двойной тап)">⚡ SPLIT</button>
                 <button id="ejectBtn" class="action-btn" title="Выстрел массой">💨 EJECT</button>
+                <button id="boostBtn" class="action-btn" title="Ускорение (2 сек, кулдаун 15 сек)">🚀 BOOST</button>
             </div>
             
             <div id="startScreen">
@@ -171,6 +178,15 @@
         let crystals = parseInt(localStorage.getItem('snakeCrystals') || '10');
         let currentSkin = localStorage.getItem('snakeSkin') || 'default';
         let activeBoosters = { speed: 0, shield: false };
+        let boostCooldown = 0; // Кулдаун ускорения (в кадрах, 15 сек = 900 кадров при 60 FPS)
+        let boostActive = false; // Флаг для активации ускорения
+        
+        // Онлайн режим
+        let isOnline = false;
+        let firebaseApp = null;
+        let firebaseDatabase = null;
+        let onlinePlayers = {}; // Онлайн игроки
+        let playerId = null; // ID текущего игрока
 
         // Размер мира (большая карта)
         const worldWidth = 3000;
@@ -319,6 +335,12 @@
             ejectedMass = [];
 
             effects = [];
+            
+            // Инициализация онлайн режима (если еще не инициализирован)
+            if (!isOnline && typeof firebase !== 'undefined') {
+                // Раскомментируйте следующую строку после настройки Firebase
+                initFirebase();
+            }
         }
         
         function createVirus() {
@@ -454,9 +476,19 @@
                 activeBoosters.speed--;
             }
             
+            // Обновление ускорения
+            if (boostActive) {
+                activeBoosters.speed = 120; // 2 секунды при 60 FPS
+                boostActive = false;
+            }
+            
             // Обновление кулдаунов
             if (player.splitCooldown > 0) player.splitCooldown--;
             if (player.ejectCooldown > 0) player.ejectCooldown--;
+            if (boostCooldown > 0) boostCooldown--;
+            
+            // Обновление UI кнопки ускорения
+            updateBoostButton();
             
             // Обновляем уровень на основе массы
             player.level = calculateLevel(player.mass);
@@ -874,6 +906,20 @@
                     }
                 }
             });
+            
+            // Онлайн игроки
+            if (isOnline) {
+                Object.values(onlinePlayers).forEach(onlinePlayer => {
+                    if (onlinePlayer.body && onlinePlayer.body.length > 0) {
+                        const onlinePlayerSize = 8 + (onlinePlayer.mass * 0.8);
+                        drawSnake(onlinePlayer.body, onlinePlayer.color, false, 'dragon', { x: 1, y: 0 }, onlinePlayerSize, viewWidth, viewHeight);
+                        // Ник онлайн игрока
+                        if (onlinePlayer.body.length > 0) {
+                            drawName(onlinePlayer.body[0].x, onlinePlayer.body[0].y - 25, onlinePlayer.name, onlinePlayer.color, onlinePlayer.level);
+                        }
+                    }
+                });
+            }
             
             // Восстанавливаем трансформацию после отрисовки всех игровых объектов
             ctx.restore();
@@ -1787,9 +1833,178 @@
         }
         
         // Инициализация кнопок Split и Eject
+        // Функция активации ускорения
+        function activateBoost() {
+            if (boostCooldown > 0 || gameState !== 'playing') return;
+            
+            boostActive = true;
+            boostCooldown = 900; // 15 секунд при 60 FPS
+            updateBoostButton();
+        }
+        
+        // Обновление UI кнопки ускорения
+        function updateBoostButton() {
+            const boostBtn = document.getElementById('boostBtn');
+            if (!boostBtn) return;
+            
+            if (boostCooldown > 0) {
+                const seconds = Math.ceil(boostCooldown / 60);
+                boostBtn.textContent = `🚀 ${seconds}s`;
+                boostBtn.disabled = true;
+                boostBtn.style.opacity = '0.5';
+            } else {
+                boostBtn.textContent = '🚀 BOOST';
+                boostBtn.disabled = false;
+                boostBtn.style.opacity = '1';
+            }
+        }
+        
+        // Функция показа уведомления
+        function showNotification(message, duration = 5000) {
+            const notificationsEl = document.getElementById('notifications');
+            if (!notificationsEl) return;
+            
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            notificationsEl.appendChild(notification);
+            
+            // Анимация появления
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 10);
+            
+            // Удаление через duration
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, duration);
+        }
+        
+        // Инициализация Firebase (онлайн режим)
+        function initFirebase() {
+            // ВАЖНО: Замените эти значения на ваши Firebase конфигурационные данные
+            // Для получения конфигурации: Firebase Console -> Project Settings -> General -> Your apps
+            const firebaseConfig = {
+                apiKey: "AIzaSyAbZdP5504aKObNMmByNC0Xx6OMrsl5Sdk",
+                authDomain: "snake-io-game-cbbe7.firebaseapp.com",
+                databaseURL: "https://snake-io-game-cbbe7-default-rtdb.firebaseio.com",
+                projectId: "snake-io-game-cbbe7",
+                storageBucket: "snake-io-game-cbbe7.firebasestorage.app",
+                messagingSenderId: "334920744888",
+                appId: "1:334920744888:web:30975f660be0b2bb8b594d"
+            };
+            
+            try {
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+                firebaseDatabase = firebase.database();
+                isOnline = true;
+                console.log('Firebase инициализирован');
+                
+                // Генерируем уникальный ID для игрока
+                playerId = 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                
+                // Подключаемся к игре
+                connectToGame();
+            } catch (error) {
+                console.error('Ошибка инициализации Firebase:', error);
+                isOnline = false;
+            }
+        }
+        
+        // Подключение к онлайн игре
+        function connectToGame() {
+            if (!firebaseDatabase || !isOnline) return;
+            
+            // Отправляем уведомление о присоединении
+            const playerName = player.name || 'Игрок';
+            showNotification(`${playerName} присоединился!`, 5000);
+            
+            // Отправляем информацию о себе в Firebase
+            firebaseDatabase.ref('players/' + playerId).set({
+                name: playerName,
+                x: player.x,
+                y: player.y,
+                mass: player.mass,
+                level: player.level,
+                color: player.color,
+                timestamp: Date.now()
+            });
+            
+            // Слушаем изменения других игроков
+            firebaseDatabase.ref('players').on('child_added', (snapshot) => {
+                const data = snapshot.val();
+                const id = snapshot.key;
+                
+                if (id !== playerId && !onlinePlayers[id]) {
+                    onlinePlayers[id] = {
+                        id: id,
+                        name: data.name,
+                        x: data.x,
+                        y: data.y,
+                        mass: data.mass,
+                        level: data.level,
+                        color: data.color,
+                        body: []
+                    };
+                    
+                    // Показываем уведомление о присоединении другого игрока
+                    showNotification(`${data.name} присоединился!`, 5000);
+                }
+            });
+            
+            // Слушаем обновления других игроков
+            firebaseDatabase.ref('players').on('child_changed', (snapshot) => {
+                const data = snapshot.val();
+                const id = snapshot.key;
+                
+                if (id !== playerId && onlinePlayers[id]) {
+                    onlinePlayers[id].x = data.x;
+                    onlinePlayers[id].y = data.y;
+                    onlinePlayers[id].mass = data.mass;
+                    onlinePlayers[id].level = data.level;
+                }
+            });
+            
+            // Удаляем игроков при отключении
+            firebaseDatabase.ref('players').on('child_removed', (snapshot) => {
+                const id = snapshot.key;
+                if (id !== playerId && onlinePlayers[id]) {
+                    showNotification(`${onlinePlayers[id].name} покинул игру`, 5000);
+                    delete onlinePlayers[id];
+                }
+            });
+        }
+        
+        // Обновление позиции игрока в Firebase
+        function updateOnlinePosition() {
+            if (!firebaseDatabase || !isOnline || !playerId) return;
+            
+            firebaseDatabase.ref('players/' + playerId).update({
+                x: player.x,
+                y: player.y,
+                mass: player.mass,
+                level: player.level,
+                timestamp: Date.now()
+            });
+        }
+        
+        // Отключение от игры
+        function disconnectFromGame() {
+            if (!firebaseDatabase || !isOnline || !playerId) return;
+            
+            firebaseDatabase.ref('players/' + playerId).remove();
+            onlinePlayers = {};
+        }
+        
         function initActionButtons() {
             const splitBtn = document.getElementById('splitBtn');
             const ejectBtn = document.getElementById('ejectBtn');
+            const boostBtn = document.getElementById('boostBtn');
             
             if (splitBtn) {
                 splitBtn.addEventListener('click', () => {
@@ -1823,6 +2038,14 @@
                     if (ejectInterval) {
                         clearInterval(ejectInterval);
                         ejectInterval = null;
+                    }
+                });
+            }
+            
+            if (boostBtn) {
+                boostBtn.addEventListener('click', () => {
+                    if (gameState === 'playing') {
+                        activateBoost();
                     }
                 });
             }

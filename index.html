@@ -688,31 +688,38 @@
                 });
             });
 
-            // ПРОСТАЯ ЛОГИКА: Выше уровни съедают меньшие уровни
+            // СТАБИЛЬНАЯ ЛОГИКА: Выше уровни съедают меньшие уровни
+            // Проверяем каждый кадр для всех ботов
             bots.forEach((bot, botIndex) => {
-                if (bot.body.length === 0) return;
+                if (!bot || bot.body.length === 0) return;
                 
                 const botHead = bot.body[0];
                 const playerHead = player.body[0] || { x: player.x, y: player.y };
                 
-                // Вычисляем уровни ПРАВИЛЬНО
-                const playerMass = player.mass || player.length || 5;
-                const botMass = bot.mass || bot.length || 5;
+                // ВСЕГДА вычисляем уровни заново для надежности
+                const playerMass = Math.max(5, player.mass || player.length || 5);
+                const botMass = Math.max(5, bot.mass || bot.length || 5);
                 const playerLevel = calculateLevel(playerMass);
                 const botLevel = calculateLevel(botMass);
                 
-                // Обновляем уровни
+                // Обновляем уровни в объектах
                 player.level = playerLevel;
                 bot.level = botLevel;
                 
+                // Вычисляем размеры
                 const playerSize = 8 + (playerMass * 0.8);
                 const botSize = 8 + (botMass * 0.8);
                 
-                // Проверка 1: Столкновение голов
-                const distToHead = Math.sqrt(Math.pow(playerHead.x - botHead.x, 2) + Math.pow(playerHead.y - botHead.y, 2));
-                const touchDistance = (playerSize + botSize) * 1.5; // Увеличиваем порог до 150%
+                // СТАБИЛЬНАЯ ПРОВЕРКА: Расстояние между головами
+                const dx = playerHead.x - botHead.x;
+                const dy = playerHead.y - botHead.y;
+                const distToHead = Math.sqrt(dx * dx + dy * dy);
                 
-                if (distToHead < touchDistance) {
+                // Порог касания: 120% суммы размеров (стабильный и надежный)
+                const touchThreshold = (playerSize + botSize) * 1.2;
+                
+                // Если головы касаются - проверяем уровни
+                if (distToHead < touchThreshold) {
                     // Игрок выше уровня бота - игрок съедает бота
                     if (playerLevel > botLevel) {
                         const gainedMass = Math.floor(botMass / 2);
@@ -727,7 +734,7 @@
                         localStorage.setItem('snakeCoins', coins);
                         return;
                     }
-                    // Бот выше уровня игрока - бот съедает игрока
+                    // Бот выше уровня игрока - бот съедает игрока (СТАБИЛЬНО, БЕЗ УСЛОВИЙ)
                     if (botLevel > playerLevel) {
                         if (!activeBoosters.shield) {
                             gameOver();
@@ -739,16 +746,18 @@
                     }
                 }
                 
-                // Проверка 2: Столкновение головы игрока с телом бота (если бот выше уровня)
-                if (botLevel > playerLevel && bot.body.length > 0) {
-                    for (let i = 0; i < bot.body.length; i++) {
+                // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Столкновение с телом бота (если бот выше уровня)
+                if (botLevel > playerLevel && bot.body.length > 2) {
+                    // Проверяем только первые 10 сегментов тела для производительности
+                    const checkSegments = Math.min(10, bot.body.length);
+                    for (let i = 2; i < checkSegments; i++) {
                         const segment = bot.body[i];
-                        if (i < 2) continue; // Пропускаем первые 2 сегмента
+                        const segDx = playerHead.x - segment.x;
+                        const segDy = playerHead.y - segment.y;
+                        const distToBody = Math.sqrt(segDx * segDx + segDy * segDy);
                         
-                        const distToBody = Math.sqrt(Math.pow(playerHead.x - segment.x, 2) + Math.pow(playerHead.y - segment.y, 2));
-                        
-                        // Если голова игрока касается тела бота
-                        if (distToBody < (playerSize + botSize) * 0.8) {
+                        // Порог касания тела: 100% суммы размеров
+                        if (distToBody < (playerSize + botSize)) {
                             if (!activeBoosters.shield) {
                                 gameOver();
                                 return;

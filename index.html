@@ -413,8 +413,20 @@
             
             // Скорость зависит от массы (маленькие быстрее)
             const baseSpeed = 3;
-            // Боты тоже должны иметь более заметную разницу в скорости
-            const speedMultiplier = Math.max(0.3, 1 - (mass - 5) / 50);
+            
+            // Боты тоже используют двухэтапное замедление
+            let speedMultiplier;
+            const level15Mass = 70; // Масса для уровня 15
+            
+            if (mass <= level15Mass) {
+                // До уровня 15 - мягкое замедление
+                speedMultiplier = Math.max(0.5, 1 - (mass - 5) / 100);
+            } else {
+                // После уровня 15 - более агрессивное замедление
+                const excessMass = mass - level15Mass;
+                speedMultiplier = Math.max(0.25, 0.5 - excessMass / 50);
+            }
+            
             const botSpeed = baseSpeed * speedMultiplier;
             
             const bot = {
@@ -618,9 +630,20 @@
             
             // Скорость зависит от массы (маленькие быстрее, большие медленнее)
             const baseSpeed = 3.5; // Увеличена базовая скорость для более динамичного геймплея
-            // Более заметная разница в скорости (как в Agar.io)
-            // Маленькие змейки намного быстрее больших
-            const speedMultiplier = Math.max(0.25, 1 - (player.mass - 5) / 50); // Более агрессивное замедление
+            
+            // Двухэтапное замедление: до уровня 15 - мягкое, после - более агрессивное
+            let speedMultiplier;
+            const level15Mass = 70; // Масса для уровня 15 (15 = floor(70/5) + 1)
+            
+            if (player.mass <= level15Mass) {
+                // До уровня 15 - мягкое замедление (не так сильно замедляется)
+                speedMultiplier = Math.max(0.5, 1 - (player.mass - 5) / 100);
+            } else {
+                // После уровня 15 - более агрессивное замедление
+                const excessMass = player.mass - level15Mass;
+                speedMultiplier = Math.max(0.25, 0.5 - excessMass / 50);
+            }
+            
             player.speed = baseSpeed * speedMultiplier + (activeBoosters.speed > 0 ? 1.0 : 0);
 
             // Сбор еды (ПЕРЕД проверкой столкновений, чтобы не было ложных срабатываний)

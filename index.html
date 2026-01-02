@@ -364,8 +364,12 @@
             camera.x = player.x - canvas.width / 2;
             camera.y = player.y - canvas.height / 2;
 
-            // Боты убраны - только онлайн игроки
+            // Боты - создаем начальное количество
             bots = [];
+            const botCount = window.innerWidth < 500 ? 8 : 12;
+            for (let i = 0; i < botCount; i++) {
+                bots.push(createBot());
+            }
 
             // Еда (больше еды для более интересного геймплея)
             food = [];
@@ -713,8 +717,7 @@
                 }
             }
 
-            // Боты убраны - только онлайн игроки
-            /*
+            // Движение ботов
             bots.forEach((bot, botIndex) => {
                 // AI бота - ищет ближайшую еду
                 let nearestFood = null;
@@ -800,10 +803,8 @@
                     }
                 });
             });
-            */
 
-            // Боты убраны - столкновения только с онлайн игроками
-            /*
+            // Столкновения игрока с ботами
             bots.forEach((bot, botIndex) => {
                 if (!bot || !bot.body || bot.body.length === 0) return;
                 
@@ -885,14 +886,12 @@
                     }
                 }
             });
-            */
 
             // Столкновение с собственным телом ОТКЛЮЧЕНО
             // Игрок никогда не умирает от столкновения с собственным телом
             // (код проверки самостолкновения удален по запросу пользователя)
 
-            // Боты убраны - столкновения между ботами удалены
-            /*
+            // Столкновения между ботами
             bots.forEach((bot1, bot1Index) => {
                 if (bot1.body.length === 0) return;
                 const bot1Head = bot1.body[0];
@@ -1080,8 +1079,7 @@
                 ctx.stroke();
             });
 
-            // Боты убраны - только онлайн игроки
-            /*
+            // Боты
             bots.forEach(bot => {
                 // Проверка видимости (в игровых координатах)
                 if (bot.x > camera.x - 100 && bot.x < camera.x + viewWidth + 100 &&
@@ -1096,7 +1094,6 @@
                     }
                 }
             });
-            */
 
             // Вирусы (препятствия) с учетом камеры
             viruses.forEach(virus => {
@@ -1728,7 +1725,17 @@
                 minimapCtx.fillRect(mx - 1, my - 1, 2, 2);
             });
             
-            // Боты убраны - только онлайн игроки на мини-карте
+            // Боты на мини-карте
+            bots.forEach(bot => {
+                if (bot.body.length > 0) {
+                    const mx = bot.body[0].x * scaleX;
+                    const my = bot.body[0].y * scaleY;
+                    minimapCtx.fillStyle = bot.color;
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(mx, my, 2, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
             
             // Игрок на мини-карте
             if (player.body.length > 0) {
@@ -2549,6 +2556,11 @@
                 // (timestamp игрока больше нашего времени подключения)
                 if (data.timestamp && data.timestamp > connectTimestamp) {
                     showNotification(`${data.name} присоединился!`, 5000);
+                    
+                    // Когда реальный игрок заходит, убираем одного бота
+                    if (bots.length > 0) {
+                        bots.splice(0, 1); // Удаляем первого бота
+                    }
                 }
             });
             
@@ -2604,6 +2616,13 @@
                 if (id !== playerId && onlinePlayers[id]) {
                     showNotification(`${onlinePlayers[id].name} покинул игру`, 5000);
                     delete onlinePlayers[id];
+                    
+                    // Когда реальный игрок уходит, добавляем одного бота обратно (если нужно)
+                    const onlinePlayerCount = Object.keys(onlinePlayers).length;
+                    const maxBots = window.innerWidth < 500 ? 8 : 12;
+                    if (bots.length < maxBots && onlinePlayerCount < maxBots) {
+                        bots.push(createBot());
+                    }
                 }
             });
         }

@@ -102,9 +102,15 @@
 
     <script>
         // Telegram Web App
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+        const tg = window.Telegram && window.Telegram.WebApp;
+        if (tg) {
+            try {
+                tg.expand();
+                tg.ready();
+            } catch (e) {
+                console.warn('Telegram WebApp API error:', e);
+            }
+        }
 
         // Элементы
         const canvas = document.getElementById('gameCanvas');
@@ -131,17 +137,31 @@
         // Настройка canvas
         function resizeCanvas() {
             if (!canvas) return;
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
+            // Используем window.innerWidth/Height для мобильных устройств
+            const width = window.innerWidth || canvas.offsetWidth || 800;
+            const height = window.innerHeight || canvas.offsetHeight || 600;
+            canvas.width = width;
+            canvas.height = height;
             
             // Мини-карта
             if (minimapCanvas) {
-                minimapCanvas.width = minimapCanvas.offsetWidth;
-                minimapCanvas.height = minimapCanvas.offsetHeight;
+                minimapCanvas.width = minimapCanvas.offsetWidth || 120;
+                minimapCanvas.height = minimapCanvas.offsetHeight || 120;
             }
         }
-        resizeCanvas();
+        
+        // Инициализация canvas после загрузки
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                resizeCanvas();
+            });
+        } else {
+            resizeCanvas();
+        }
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 100);
+        });
 
         // Игровые переменные
         let gameState = 'menu';
@@ -212,6 +232,11 @@
         const joystickBase = document.getElementById('joystickBase');
         const joystickHandle = document.getElementById('joystickHandle');
         const joystickRadius = 60;
+        
+        // Проверка существования элементов джойстика
+        if (!joystickBase || !joystickHandle) {
+            console.error('Joystick elements not found!');
+        }
 
         // Обновление UI
         function updateUI() {
@@ -1388,6 +1413,7 @@
 
         // Джойстик
         function updateJoystick(x, y) {
+            if (!joystickBase || !joystickHandle || !player) return;
             const rect = joystickBase.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
@@ -1420,18 +1446,22 @@
         function resetJoystick() {
             joystickX = 0;
             joystickY = 0;
-            joystickHandle.style.transform = 'translate(-50%, -50%)';
-            joystickHandle.classList.remove('active');
+            if (joystickHandle) {
+                joystickHandle.style.transform = 'translate(-50%, -50%)';
+                joystickHandle.classList.remove('active');
+            }
             joystickActive = false;
         }
         
         // События джойстика
-        joystickBase.addEventListener('mousedown', (e) => {
-            if (gameState !== 'playing') return;
-            joystickActive = true;
-            joystickHandle.classList.add('active');
-            updateJoystick(e.clientX, e.clientY);
-        });
+        if (joystickBase) {
+            joystickBase.addEventListener('mousedown', (e) => {
+                if (gameState !== 'playing') return;
+                joystickActive = true;
+                if (joystickHandle) joystickHandle.classList.add('active');
+                updateJoystick(e.clientX, e.clientY);
+            });
+        }
         
         document.addEventListener('mousemove', (e) => {
             if (joystickActive && gameState === 'playing') {
@@ -1446,50 +1476,61 @@
         });
         
         // Touch события
-        joystickBase.addEventListener('touchstart', (e) => {
-            if (gameState !== 'playing') return;
-            e.preventDefault();
-            joystickActive = true;
-            joystickHandle.classList.add('active');
-            const touch = e.touches[0];
-            updateJoystick(touch.clientX, touch.clientY);
-        });
+        if (joystickBase) {
+            joystickBase.addEventListener('touchstart', (e) => {
+                if (gameState !== 'playing') return;
+                e.preventDefault();
+                e.stopPropagation();
+                joystickActive = true;
+                if (joystickHandle) joystickHandle.classList.add('active');
+                const touch = e.touches[0];
+                if (touch) updateJoystick(touch.clientX, touch.clientY);
+            });
+        }
         
         document.addEventListener('touchmove', (e) => {
             if (joystickActive && gameState === 'playing') {
                 e.preventDefault();
+                e.stopPropagation();
                 const touch = e.touches[0];
-                updateJoystick(touch.clientX, touch.clientY);
+                if (touch) updateJoystick(touch.clientX, touch.clientY);
             }
-        });
+        }, { passive: false });
         
-        document.addEventListener('touchend', () => {
+        document.addEventListener('touchend', (e) => {
             if (joystickActive) {
+                e.preventDefault();
                 resetJoystick();
             }
-        });
+        }, { passive: false });
 
         // Свайпы
         let touchStartX = 0;
         let touchStartY = 0;
 
-        canvas.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-        });
+        if (canvas) {
+            canvas.addEventListener('touchstart', (e) => {
+                if (!e.touches || !e.touches[0]) return;
+                e.preventDefault();
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }, { passive: false });
 
-        canvas.addEventListener('touchend', (e) => {
-            if (gameState !== 'playing') return;
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
-            const dx = touchEndX - touchStartX;
-            const dy = touchEndY - touchStartY;
-            
-            // Плавное движение в любом направлении (если свайп достаточно большой)
-            if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
-                setDirection(dx, dy);
-            }
-        });
+            canvas.addEventListener('touchend', (e) => {
+                if (gameState !== 'playing') return;
+                if (!e.changedTouches || !e.changedTouches[0]) return;
+                e.preventDefault();
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const dx = touchEndX - touchStartX;
+                const dy = touchEndY - touchStartY;
+                
+                // Плавное движение в любом направлении (если свайп достаточно большой)
+                if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+                    setDirection(dx, dy);
+                }
+            }, { passive: false });
+        }
 
         // Клавиатура (WASD для плавного движения в любую сторону)
         document.addEventListener('keydown', (e) => {

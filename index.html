@@ -695,13 +695,15 @@
                     const botHead = bot.body[0];
                     const distToBotHead = Math.sqrt(Math.pow(player.x - botHead.x, 2) + Math.pow(player.y - botHead.y, 2));
                     
-                    // Если игрок больше бота - съедаем его
+                    // Если игрок выше уровня бота (хотя бы на 1) - съедаем его
                     const playerMass = player.mass || player.length;
                     const botMass = bot.mass || bot.length;
+                    const playerLevelCheck = player.level || calculateLevel(playerMass);
+                    const botLevelCheck = bot.level || calculateLevel(botMass);
                     const playerSize = 8 + (playerMass * 0.8);
                     const botSize = 8 + (botMass * 0.8);
-                    // Увеличиваем порог для поедания бота
-                    if (distToBotHead < (playerSize + botSize) * 0.6 && playerMass > botMass) {
+                    // Игрок может съесть бота, если его уровень выше (хотя бы на 1)
+                    if (distToBotHead < (playerSize + botSize) * 0.6 && playerLevelCheck > botLevelCheck) {
                         // Игрок съедает бота
                         const gainedMass = Math.floor(botMass / 2);
                         player.length += gainedMass;
@@ -715,10 +717,12 @@
                         return; // Выходим из цикла, чтобы не проверять дальше
                     }
                     
-                    // Проверяем столкновение с телом бота (только если бот ЗНАЧИТЕЛЬНО больше игрока)
+                    // Проверяем столкновение с телом бота (только если бот выше уровня игрока хотя бы на 1)
                     // Добавляем большой запас, чтобы избежать ложных срабатываний
                     // И только если прошло время после последнего поедания еды (минимум 60 кадров)
-                    if (botMass > playerMass * 2.0 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 60)) {
+                    const playerLevelCheck2 = player.level || calculateLevel(playerMass);
+                    const botLevelCheck2 = bot.level || calculateLevel(botMass);
+                    if (botLevelCheck2 > playerLevelCheck2 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 60)) {
                         bot.body.forEach((segment, index) => {
                             if (index < 30) return; // Игнорируем первые 30 сегментов (увеличено с 20)
                             
@@ -760,6 +764,39 @@
             // Столкновение с собственным телом ОТКЛЮЧЕНО
             // Игрок никогда не умирает от столкновения с собственным телом
             // (код проверки самостолкновения удален по запросу пользователя)
+
+            // Столкновения между ботами (боты могут съедать друг друга)
+            bots.forEach((bot1, bot1Index) => {
+                if (bot1.body.length === 0) return;
+                
+                bots.forEach((bot2, bot2Index) => {
+                    if (bot1Index === bot2Index || bot2.body.length === 0) return;
+                    
+                    const bot1Mass = bot1.mass || bot1.length;
+                    const bot2Mass = bot2.mass || bot2.length;
+                    const bot1Level = bot1.level || calculateLevel(bot1Mass);
+                    const bot2Level = bot2.level || calculateLevel(bot2Mass);
+                    
+                    // Если бот1 выше уровня бота2 хотя бы на 1 - съедаем бота2
+                    if (bot1Level > bot2Level) {
+                        const bot2Head = bot2.body[0];
+                        const dist = Math.sqrt(Math.pow(bot1.x - bot2Head.x, 2) + Math.pow(bot1.y - bot2Head.y, 2));
+                        const bot1Size = 8 + (bot1Mass * 0.8);
+                        const bot2Size = 8 + (bot2Mass * 0.8);
+                        
+                        if (dist < (bot1Size + bot2Size) * 0.6) {
+                            // Бот1 съедает бота2
+                            const gainedMass = Math.floor(bot2Mass / 2);
+                            bot1.length += gainedMass;
+                            bot1.mass += gainedMass;
+                            bot1.level = calculateLevel(bot1.mass);
+                            createKillEffect(bot2.x, bot2.y);
+                            bots[bot2Index] = createBot();
+                            return;
+                        }
+                    }
+                });
+            });
 
             // Обновление частей змейки после split
             updateSnakeParts();

@@ -365,16 +365,18 @@
                 bots.push(createBot());
             }
 
-            // Еда (уменьшено для производительности на мобильных)
+            // Еда (больше еды для более интересного геймплея)
             food = [];
-            const foodCount = window.innerWidth < 500 ? 200 : 300; // Меньше еды на мобильных
+            const foodCount = window.innerWidth < 500 ? 250 : 350; // Больше еды
             for (let i = 0; i < foodCount; i++) {
                 createFood();
             }
             
             // Вирусы (препятствия)
+            // Больше вирусов для более интересного геймплея
             viruses = [];
-            for (let i = 0; i < 10; i++) {
+            const virusCount = window.innerWidth < 500 ? 12 : 15; // Больше вирусов
+            for (let i = 0; i < virusCount; i++) {
                 createVirus();
             }
             
@@ -411,7 +413,8 @@
             
             // Скорость зависит от массы (маленькие быстрее)
             const baseSpeed = 3;
-            const speedMultiplier = Math.max(0.4, 1 - (mass - 5) / 80);
+            // Боты тоже должны иметь более заметную разницу в скорости
+            const speedMultiplier = Math.max(0.3, 1 - (mass - 5) / 50);
             const botSpeed = baseSpeed * speedMultiplier;
             
             const bot = {
@@ -614,9 +617,11 @@
             player.level = calculateLevel(player.mass);
             
             // Скорость зависит от массы (маленькие быстрее, большие медленнее)
-            const baseSpeed = 3; // Базовая скорость для маленьких червяков
-            const speedMultiplier = Math.max(0.3, 1 - (player.mass - 5) / 70); // Более заметное замедление
-            player.speed = baseSpeed * speedMultiplier + (activeBoosters.speed > 0 ? 0.8 : 0);
+            const baseSpeed = 3.5; // Увеличена базовая скорость для более динамичного геймплея
+            // Более заметная разница в скорости (как в Agar.io)
+            // Маленькие змейки намного быстрее больших
+            const speedMultiplier = Math.max(0.25, 1 - (player.mass - 5) / 50); // Более агрессивное замедление
+            player.speed = baseSpeed * speedMultiplier + (activeBoosters.speed > 0 ? 1.0 : 0);
 
             // Сбор еды (ПЕРЕД проверкой столкновений, чтобы не было ложных срабатываний)
             // Используем обратный цикл, чтобы избежать проблем при удалении элементов
@@ -2227,22 +2232,25 @@
             const halfMass = Math.floor(player.mass / 2);
             const halfLength = Math.floor(player.length / 2);
             
-            // Создаем новую часть - размещаем немного позади основной части
-            // Используем тот же direction, чтобы двигалась в том же направлении
-            const offsetX = -player.direction.x * 40;
-            const offsetY = -player.direction.y * 40;
+            // Создаем новую часть - разлетается с большой скоростью (как в Agar.io)
+            const splitSpeed = 8; // Скорость разлета
             const newPart = {
-                x: player.x + offsetX,
-                y: player.y + offsetY,
+                x: player.x,
+                y: player.y,
                 body: player.body.slice(halfLength),
-                direction: { x: player.direction.x, y: player.direction.y }, // То же направление
-                speed: player.speed * 0.8, // Немного медленнее, чтобы оставалась рядом
+                direction: { 
+                    x: player.direction.x * splitSpeed, // Разлетается в направлении движения
+                    y: player.direction.y * splitSpeed 
+                },
+                speed: player.speed * 1.2, // Быстрее после разделения
                 length: halfLength,
                 mass: halfMass,
                 color: player.color,
                 headType: player.headType,
                 name: player.name,
-                mergeTimer: 300 // Таймер для слияния обратно
+                mergeTimer: 600, // 10 секунд до слияния (больше времени)
+                splitVelocity: splitSpeed, // Начальная скорость разлета
+                isSplitting: true // Флаг разделения
             };
             
             // Уменьшаем основную змейку
@@ -2257,38 +2265,58 @@
         }
         
         
-        // Обновление частей змейки после split
+        // Обновление частей змейки после split (улучшенная версия - как в Agar.io)
         function updateSnakeParts() {
             player.parts.forEach((part, index) => {
                 // Вычисляем расстояние до основной части
                 const distToMain = Math.sqrt(Math.pow(player.x - part.x, 2) + Math.pow(player.y - part.y, 2));
                 
-                // Если часть слишком далеко, корректируем направление к основной части
-                if (distToMain > 100) {
-                    const angleToMain = Math.atan2(player.y - part.y, player.x - part.x);
-                    part.direction.x = Math.cos(angleToMain) * 0.3 + part.direction.x * 0.7;
-                    part.direction.y = Math.sin(angleToMain) * 0.3 + part.direction.y * 0.7;
-                    // Нормализуем направление
-                    const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
-                    if (len > 0) {
-                        part.direction.x /= len;
-                        part.direction.y /= len;
+                // Если часть только что разделилась, она разлетается быстро
+                if (part.isSplitting && part.splitVelocity > 0) {
+                    // Быстрое разлетание в направлении движения
+                    part.x += part.direction.x * part.splitVelocity;
+                    part.y += part.direction.y * part.splitVelocity;
+                    part.splitVelocity *= 0.95; // Постепенно замедляется
+                    
+                    // Когда скорость разлета становится маленькой, переключаемся на обычное движение
+                    if (part.splitVelocity < 0.5) {
+                        part.isSplitting = false;
+                        // Нормализуем направление для обычного движения
+                        const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
+                        if (len > 0) {
+                            part.direction.x /= len;
+                            part.direction.y /= len;
+                        }
                     }
-                } else if (distToMain < 60) {
-                    // Если слишком близко, немного отдаляемся
-                    const angleAway = Math.atan2(part.y - player.y, part.x - player.x);
-                    part.direction.x = Math.cos(angleAway) * 0.2 + part.direction.x * 0.8;
-                    part.direction.y = Math.sin(angleAway) * 0.2 + part.direction.y * 0.8;
-                    const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
-                    if (len > 0) {
-                        part.direction.x /= len;
-                        part.direction.y /= len;
+                } else {
+                    // Обычное движение - медленное сближение к основной части
+                    if (distToMain > 150) {
+                        // Если далеко, двигаемся к основной части
+                        const angleToMain = Math.atan2(player.y - part.y, player.x - part.x);
+                        part.direction.x = Math.cos(angleToMain) * 0.5 + part.direction.x * 0.5;
+                        part.direction.y = Math.sin(angleToMain) * 0.5 + part.direction.y * 0.5;
+                        // Нормализуем направление
+                        const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
+                        if (len > 0) {
+                            part.direction.x /= len;
+                            part.direction.y /= len;
+                        }
+                    } else if (distToMain < 80) {
+                        // Если слишком близко, немного отдаляемся
+                        const angleAway = Math.atan2(part.y - player.y, part.x - player.x);
+                        part.direction.x = Math.cos(angleAway) * 0.3 + part.direction.x * 0.7;
+                        part.direction.y = Math.sin(angleAway) * 0.3 + part.direction.y * 0.7;
+                        const len = Math.sqrt(part.direction.x * part.direction.x + part.direction.y * part.direction.y);
+                        if (len > 0) {
+                            part.direction.x /= len;
+                            part.direction.y /= len;
+                        }
                     }
+                    
+                    // Движение части
+                    part.x += part.direction.x * part.speed;
+                    part.y += part.direction.y * part.speed;
                 }
-                
-                // Движение части
-                part.x += part.direction.x * part.speed;
-                part.y += part.direction.y * part.speed;
                 
                 // Обновление тела
                 part.body.unshift({ x: part.x, y: part.y });
@@ -2299,8 +2327,8 @@
                 // Уменьшение таймера слияния
                 part.mergeTimer--;
                 if (part.mergeTimer <= 0) {
-                    // Слияние обратно
-                    if (distToMain < 50) {
+                    // Слияние обратно (только если близко)
+                    if (distToMain < 60) {
                         player.mass += part.mass;
                         player.length += part.length;
                         player.parts.splice(index, 1);

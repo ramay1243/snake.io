@@ -176,7 +176,8 @@
             name: 'Вы',
             parts: [], // Части змейки после split
             splitCooldown: 0, // Кулдаун для split
-            ejectCooldown: 0 // Кулдаун для eject
+            ejectCooldown: 0, // Кулдаун для eject
+            lastFoodTime: 0 // Время последнего поедания еды (для защиты от ложных столкновений)
         };
         
         // Функция для расчета уровня на основе массы
@@ -442,6 +443,7 @@
                     createCollectEffect(player.x, player.y, f.color);
                     food.splice(i, 1);
                     createFood();
+                    player.lastFoodTime = gameFrame; // Запоминаем время поедания еды
                     updateUI();
                     localStorage.setItem('snakeCoins', coins);
                 }
@@ -606,25 +608,36 @@
                         return; // Выходим из цикла, чтобы не проверять дальше
                     }
                     
-                    // Проверяем столкновение с телом бота (только если бот значительно больше игрока)
-                    // Добавляем запас, чтобы избежать ложных срабатываний
-                    if (botMass > playerMass * 1.1) {
+                    // Проверяем столкновение с телом бота (только если бот ЗНАЧИТЕЛЬНО больше игрока)
+                    // Добавляем большой запас, чтобы избежать ложных срабатываний
+                    // И только если прошло время после последнего поедания еды
+                    if (botMass > playerMass * 1.5 && (!player.lastFoodTime || (gameFrame - player.lastFoodTime) > 30)) {
                         bot.body.forEach((segment, index) => {
-                            if (index < 10) return; // Игнорируем первые 10 сегментов для безопасности
+                            if (index < 20) return; // Игнорируем первые 20 сегментов (увеличено с 10)
                             
                             const playerSize = 8 + (playerMass * 0.8);
                             const botSize = 8 + (botMass * 0.8);
                             const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
                             
-                            // Очень строгий порог столкновения - только реальное касание
-                            // Уменьшаем порог до 30% суммы размеров для более точного определения
-                            if (dist < (playerSize + botSize) * 0.3) {
-                                if (!activeBoosters.shield) {
-                                    gameOver();
-                                    return;
-                                } else {
-                                    activeBoosters.shield = false;
-                                    createShieldEffect(player.x, player.y);
+                            // ОЧЕНЬ строгий порог столкновения - только реальное касание
+                            // Уменьшаем порог до 20% суммы размеров (было 30%)
+                            // Это означает, что нужно практически врезаться
+                            if (dist < (playerSize + botSize) * 0.2) {
+                                // Дополнительная проверка: убеждаемся, что игрок действительно движется к сегменту
+                                const angleToSegment = Math.atan2(segment.y - player.y, segment.x - player.x);
+                                const playerAngle = Math.atan2(player.direction.y, player.direction.x);
+                                const angleDiff = Math.abs(angleToSegment - playerAngle);
+                                const minAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+                                
+                                // Столкновение только если игрок движется НАВСТРЕЧУ сегменту (не убегает)
+                                if (minAngleDiff < Math.PI / 2) { // Движется в направлении сегмента
+                                    if (!activeBoosters.shield) {
+                                        gameOver();
+                                        return;
+                                    } else {
+                                        activeBoosters.shield = false;
+                                        createShieldEffect(player.x, player.y);
+                                    }
                                 }
                             }
                         });
@@ -632,27 +645,36 @@
                 }
             });
 
-            // Столкновение с собственным телом (проверяем только если длина больше 80)
-            // И только если прошло достаточно времени после последнего поедания еды
-            if (player.length > 80 && player.body.length > 80) {
+            // Столкновение с собственным телом (проверяем только если длина больше 100)
+            // И только если прошло достаточно времени после последнего поедания еды (минимум 30 кадров)
+            if (player.length > 100 && player.body.length > 100 && (!player.lastFoodTime || (gameFrame - player.lastFoodTime) > 30)) {
                 // Проверяем только сегменты, которые достаточно далеко от головы
-                // Игнорируем первые 50 сегментов, чтобы избежать ложных срабатываний
+                // Игнорируем первые 70 сегментов, чтобы избежать ложных срабатываний
                 player.body.forEach((segment, index) => {
-                    if (index < 50) return; // Первые 50 сегментов не считаются (очень большой запас)
+                    if (index < 70) return; // Первые 70 сегментов не считаются (увеличено с 50)
                     
                     // Проверяем расстояние с учетом размера игрока
                     const playerSize = 8 + (player.mass * 0.8);
                     const dist = Math.sqrt(Math.pow(player.x - segment.x, 2) + Math.pow(player.y - segment.y, 2));
                     
-                    // Очень строгий порог столкновения - только реальное касание
-                    // Столкновение только если действительно очень близко (меньше 20% размера)
-                    if (dist < playerSize * 0.2) {
-                        if (!activeBoosters.shield) {
-                            gameOver();
-                            return;
-                        } else {
-                            activeBoosters.shield = false;
-                            createShieldEffect(player.x, player.y);
+                    // ОЧЕНЬ строгий порог столкновения - только реальное касание
+                    // Столкновение только если действительно очень близко (меньше 15% размера, было 20%)
+                    if (dist < playerSize * 0.15) {
+                        // Дополнительная проверка: убеждаемся, что игрок действительно движется к своему телу
+                        const angleToSegment = Math.atan2(segment.y - player.y, segment.x - player.x);
+                        const playerAngle = Math.atan2(player.direction.y, player.direction.x);
+                        const angleDiff = Math.abs(angleToSegment - playerAngle);
+                        const minAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+                        
+                        // Столкновение только если игрок движется НАВСТРЕЧУ своему телу (не убегает)
+                        if (minAngleDiff < Math.PI / 2) { // Движется в направлении сегмента
+                            if (!activeBoosters.shield) {
+                                gameOver();
+                                return;
+                            } else {
+                                activeBoosters.shield = false;
+                                createShieldEffect(player.x, player.y);
+                            }
                         }
                     }
                 });
@@ -1800,6 +1822,19 @@
             
             // Дополнительная проверка - убеждаемся, что игрок существует
             if (!player || !player.body || player.body.length === 0) return;
+            
+            // Еще одна защита - не завершаем игру, если игрок слишком маленький
+            // (это может быть ложное срабатывание при старте)
+            if ((player.mass || player.length) < 10) {
+                console.log('Защита: игрок слишком маленький для gameOver');
+                return;
+            }
+            
+            // Защита от завершения игры сразу после поедания еды (в течение 30 кадров)
+            if (player.lastFoodTime && (gameFrame - player.lastFoodTime) < 30) {
+                console.log('Защита: слишком рано после поедания еды');
+                return;
+            }
             
             gameState = 'gameover';
             const playerMass = player.mass || player.length;

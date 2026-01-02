@@ -1964,11 +1964,22 @@
                 return;
             }
             crystals -= price;
-            player.headType = headType;
+            
+            // Обновляем скин везде
             currentSkin = headType;
-            updateUI();
+            
+            // Если игра запущена, обновляем скин игрока сразу
+            if (player && gameState === 'playing') {
+                player.headType = headType;
+            }
+            
+            // Сохраняем в localStorage
             localStorage.setItem('snakeCrystals', crystals);
             localStorage.setItem('snakeSkin', headType);
+            
+            // Обновляем UI
+            updateUI();
+            
             alert('Стиль головы применен!');
         }
 

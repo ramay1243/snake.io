@@ -187,7 +187,7 @@
         let firebaseDatabase = null;
         let onlinePlayers = {}; // Онлайн игроки
         let playerId = null; // ID текущего игрока
-        let initialPlayersLoaded = false; // Флаг для отслеживания начальной загрузки игроков
+        let connectTimestamp = 0; // Время подключения к игре (для фильтрации уведомлений)
 
         // Размер мира (большая карта)
         const worldWidth = 3000;
@@ -340,7 +340,7 @@
             // Инициализация онлайн режима (если еще не инициализирован)
             if (!isOnline && typeof firebase !== 'undefined') {
                 // Раскомментируйте следующую строку после настройки Firebase
-                initialPlayersLoaded = false; // Сбрасываем флаг при новой игре
+                connectTimestamp = 0; // Сбрасываем время подключения при новой игре
                 initFirebase();
             }
         }
@@ -1982,6 +1982,9 @@
         function connectToGame() {
             if (!firebaseDatabase || !isOnline) return;
             
+            // Запоминаем время подключения - показываем уведомления только для игроков, присоединившихся ПОСЛЕ нас
+            connectTimestamp = Date.now();
+            
             // НЕ показываем уведомление о себе - только о других игроках
             const playerName = player.name || 'Игрок';
             
@@ -1996,7 +1999,7 @@
                 directionX: player.direction.x,
                 directionY: player.direction.y,
                 length: player.length,
-                timestamp: Date.now()
+                timestamp: connectTimestamp
             });
             
             // Сначала загружаем всех существующих игроков БЕЗ уведомлений
@@ -2036,76 +2039,50 @@
                     }
                 });
                 
-                // После загрузки всех существующих игроков включаем уведомления для новых
-                initialPlayersLoaded = true;
             });
             
-            // Слушаем новых игроков, но показываем уведомления только после начальной загрузки
+            // Слушаем новых игроков - показываем уведомления только если они присоединились ПОСЛЕ нас
             firebaseDatabase.ref('players').on('child_added', (snapshot) => {
                 const data = snapshot.val();
                 const id = snapshot.key;
                 
-                // Показываем уведомление только если:
-                // 1. Это не мы
-                // 2. Игрок еще не в списке
-                // 3. Начальная загрузка уже завершена (чтобы не показывать уведомления при первом подключении)
-                if (id !== playerId && !onlinePlayers[id] && initialPlayersLoaded) {
-                    // Создаем начальное тело для онлайн игрока
-                    const initialBody = [];
-                    const bodyLength = Math.max(5, Math.floor(data.mass || 5));
-                    for (let i = 0; i < bodyLength; i++) {
-                        initialBody.push({
-                            x: (data.x || 0) - i * 20,
-                            y: (data.y || 0)
-                        });
-                    }
-                    
-                    onlinePlayers[id] = {
-                        id: id,
-                        name: data.name,
-                        x: data.x || 0,
-                        y: data.y || 0,
-                        mass: data.mass || 5,
-                        level: data.level || 1,
-                        color: data.color || '#2ECC71',
-                        direction: { 
-                            x: data.directionX || 1, 
-                            y: data.directionY || 0 
-                        },
-                        length: data.length || 5,
-                        body: initialBody,
-                        lastUpdate: Date.now()
-                    };
-                    
-                    // Показываем уведомление о присоединении другого игрока (только для новых после загрузки)
+                // Пропускаем себя
+                if (id === playerId) return;
+                
+                // Если игрок уже в списке, пропускаем
+                if (onlinePlayers[id]) return;
+                
+                // Создаем начальное тело для онлайн игрока
+                const initialBody = [];
+                const bodyLength = Math.max(5, Math.floor(data.mass || 5));
+                for (let i = 0; i < bodyLength; i++) {
+                    initialBody.push({
+                        x: (data.x || 0) - i * 20,
+                        y: (data.y || 0)
+                    });
+                }
+                
+                onlinePlayers[id] = {
+                    id: id,
+                    name: data.name,
+                    x: data.x || 0,
+                    y: data.y || 0,
+                    mass: data.mass || 5,
+                    level: data.level || 1,
+                    color: data.color || '#2ECC71',
+                    direction: { 
+                        x: data.directionX || 1, 
+                        y: data.directionY || 0 
+                    },
+                    length: data.length || 5,
+                    body: initialBody,
+                    lastUpdate: Date.now()
+                };
+                
+                // Показываем уведомление ТОЛЬКО если игрок присоединился ПОСЛЕ нашего подключения
+                // (timestamp игрока больше нашего времени подключения)
+                if (data.timestamp && data.timestamp > connectTimestamp) {
                     showNotification(`${data.name} присоединился!`, 5000);
-                } else if (id !== playerId && !onlinePlayers[id]) {
-                    // Если начальная загрузка еще не завершена, просто добавляем игрока без уведомления
-                    const initialBody = [];
-                    const bodyLength = Math.max(5, Math.floor(data.mass || 5));
-                    for (let i = 0; i < bodyLength; i++) {
-                        initialBody.push({
-                            x: (data.x || 0) - i * 20,
-                            y: (data.y || 0)
-                        });
-                    }
-                    
-                    onlinePlayers[id] = {
-                        id: id,
-                        name: data.name,
-                        x: data.x || 0,
-                        y: data.y || 0,
-                        mass: data.mass || 5,
-                        level: data.level || 1,
-                        color: data.color || '#2ECC71',
-                        direction: { 
-                            x: data.directionX || 1, 
-                            y: data.directionY || 0 
-                        },
-                        length: data.length || 5,
-                        body: initialBody,
-                        lastUpdate: Date.now()
-                    };
                 }
             });
             

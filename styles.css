@@ -116,29 +116,37 @@ body {
     position: absolute;
     top: 150px;
     right: 20px;
+    width: 120px;
+    height: 120px;
     background: rgba(0, 0, 0, 0.3);
     border: none;
     border-radius: 10px;
-    padding: 10px;
-    min-width: 150px;
+    padding: 8px;
     z-index: 11;
     pointer-events: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 #top3 h3 {
     color: #FFD700;
-    font-size: 14px;
-    margin-bottom: 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
     text-align: center;
+    margin-top: 0;
 }
 
 .top3-item {
     color: #fff;
-    font-size: 12px;
-    margin: 4px 0;
-    padding: 4px;
+    font-size: 10px;
+    margin: 2px 0;
+    padding: 3px;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 5px;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .top3-item.rank1 { border-left: 3px solid #FFD700; }

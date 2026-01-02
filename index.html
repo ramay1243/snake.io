@@ -61,6 +61,24 @@
                                    class="name-input" maxlength="15">
                         </div>
                         
+                        <div class="menu-stats">
+                            <div class="stat-item">
+                                <span class="stat-icon">🏆</span>
+                                <span class="stat-label">Лучший результат:</span>
+                                <span class="stat-value" id="bestScore">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-icon">💰</span>
+                                <span class="stat-label">Монеты:</span>
+                                <span class="stat-value" id="menuCoins">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-icon">💎</span>
+                                <span class="stat-label">Кристаллы:</span>
+                                <span class="stat-value" id="menuCrystals">0</span>
+                            </div>
+                        </div>
+                        
                         <div class="menu-buttons">
                             <button class="btn btn-primary" id="startBtn">
                                 <span class="btn-icon">▶️</span>
@@ -81,6 +99,7 @@
                 <div id="finalRank" style="color: #FFD700; font-size: 24px; margin-bottom: 20px;">Место: #0</div>
                 <button class="btn" id="restartBtn">ИГРАТЬ СНОВА</button>
                 <button class="btn btn-secondary" id="shopBtn2">МАГАЗИН</button>
+                <button class="btn btn-secondary" id="menuBtn">ГЛАВНОЕ МЕНЮ</button>
             </div>
 
             <div id="shopScreen">
@@ -128,6 +147,7 @@
                     <button class="btn" onclick="buyBooster('shield', 15)">Щит (1 столкновение)</button>
                 </div>
                 <button class="btn" id="closeShopBtn">ЗАКРЫТЬ</button>
+                <button class="btn btn-secondary" id="menuBtnFromShop">ГЛАВНОЕ МЕНЮ</button>
             </div>
         </div>
     </div>
@@ -164,7 +184,7 @@
         const gameOverScreen = document.getElementById('gameOverScreen');
         const shopScreen = document.getElementById('shopScreen');
         // Инициализация элементов после загрузки DOM
-        let startBtn, restartBtn, shopBtn, shopBtn2, closeShopBtn, finalScoreEl, finalRankEl;
+        let startBtn, restartBtn, shopBtn, shopBtn2, closeShopBtn, finalScoreEl, finalRankEl, menuBtn, menuBtnFromShop;
 
         // Настройка canvas
         function resizeCanvas() {
@@ -661,24 +681,35 @@
                 bot.x += bot.direction.x * bot.speed;
                 bot.y += bot.direction.y * bot.speed;
 
-                // Границы мира
-                // Границы карты для ботов - блокируем выход за пределы
+                // Границы карты для ботов - разворачиваем и меняем направление
                 const botSize = 8 + (bot.mass * 0.8);
                 if (bot.x < botSize) {
                     bot.x = botSize;
-                    bot.direction.x = -bot.direction.x; // Отскакиваем
+                    // Разворачиваем в противоположную сторону и немного в центр
+                    bot.direction.x = Math.abs(bot.direction.x) || 0.5;
+                    bot.direction.y = (Math.random() - 0.5) * 0.5; // Добавляем случайность
                 }
                 if (bot.x > worldWidth - botSize) {
                     bot.x = worldWidth - botSize;
-                    bot.direction.x = -bot.direction.x;
+                    bot.direction.x = -Math.abs(bot.direction.x) || -0.5;
+                    bot.direction.y = (Math.random() - 0.5) * 0.5;
                 }
                 if (bot.y < botSize) {
                     bot.y = botSize;
-                    bot.direction.y = -bot.direction.y;
+                    bot.direction.x = (Math.random() - 0.5) * 0.5;
+                    bot.direction.y = Math.abs(bot.direction.y) || 0.5;
                 }
                 if (bot.y > worldHeight - botSize) {
                     bot.y = worldHeight - botSize;
-                    bot.direction.y = -bot.direction.y;
+                    bot.direction.x = (Math.random() - 0.5) * 0.5;
+                    bot.direction.y = -Math.abs(bot.direction.y) || -0.5;
+                }
+                
+                // Нормализуем направление после изменения
+                const dirLen = Math.sqrt(bot.direction.x * bot.direction.x + bot.direction.y * bot.direction.y);
+                if (dirLen > 0) {
+                    bot.direction.x /= dirLen;
+                    bot.direction.y /= dirLen;
                 }
 
                 // Обновление тела бота
@@ -2029,6 +2060,11 @@
             closeShopBtn = document.getElementById('closeShopBtn');
             finalScoreEl = document.getElementById('finalScore');
             finalRankEl = document.getElementById('finalRank');
+            menuBtn = document.getElementById('menuBtn');
+            menuBtnFromShop = document.getElementById('menuBtnFromShop');
+            
+            // Обновляем статистику в меню
+            updateMenuStats();
             
             // Загружаем сохраненный ник в поле ввода
             const nameInput = document.getElementById('playerNameInput');
@@ -2108,6 +2144,44 @@
             } else {
                 console.error('closeShopBtn not found');
             }
+            
+            // Кнопка возврата в меню из gameOver
+            if (menuBtn) {
+                menuBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    gameState = 'menu';
+                    gameOverScreen.classList.remove('show');
+                    startScreen.classList.remove('hidden');
+                    updateMenuStats();
+                });
+            }
+            
+            // Кнопка возврата в меню из магазина
+            if (menuBtnFromShop) {
+                menuBtnFromShop.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    shopScreen.classList.remove('show');
+                    startScreen.classList.remove('hidden');
+                    updateMenuStats();
+                });
+            }
+        }
+        
+        // Функция обновления статистики в меню
+        function updateMenuStats() {
+            const bestScore = parseInt(localStorage.getItem('bestScore') || '0');
+            const menuCoins = parseInt(localStorage.getItem('snakeCoins') || '0');
+            const menuCrystals = parseInt(localStorage.getItem('snakeCrystals') || '0');
+            
+            const bestScoreEl = document.getElementById('bestScore');
+            const menuCoinsEl = document.getElementById('menuCoins');
+            const menuCrystalsEl = document.getElementById('menuCrystals');
+            
+            if (bestScoreEl) bestScoreEl.textContent = bestScore;
+            if (menuCoinsEl) menuCoinsEl.textContent = menuCoins;
+            if (menuCrystalsEl) menuCrystalsEl.textContent = menuCrystals;
         }
         
         // Функции Split и Eject Mass
@@ -2522,6 +2596,12 @@
             const allSnakes = [{ length: playerMass, isPlayer: true }, ...bots.map(b => ({ length: b.mass || b.length, isPlayer: false }))];
             allSnakes.sort((a, b) => b.length - a.length);
             const rank = allSnakes.findIndex(s => s.isPlayer) + 1;
+            
+            // Сохраняем лучший результат
+            const bestScore = parseInt(localStorage.getItem('bestScore') || '0');
+            if (player.length > bestScore) {
+                localStorage.setItem('bestScore', player.length.toString());
+            }
             
             if (finalScoreEl) finalScoreEl.textContent = `Длина: ${player.length}`;
             if (finalRankEl) finalRankEl.textContent = `Место: #${rank}`;

@@ -490,6 +490,40 @@
             // Обновление UI кнопки ускорения
             updateBoostButton();
             
+            // Обновление позиции в онлайн режиме (каждые 3 кадра для более плавной синхронизации)
+            if (isOnline && gameFrame % 3 === 0) {
+                updateOnlinePosition();
+            }
+            
+            // Обновление тел онлайн игроков (плавное движение)
+            if (isOnline) {
+                const now = Date.now();
+                Object.values(onlinePlayers).forEach(onlinePlayer => {
+                    // Удаляем неактивных игроков (не обновлялись более 5 секунд)
+                    if (onlinePlayer.lastUpdate && (now - onlinePlayer.lastUpdate) > 5000) {
+                        delete onlinePlayers[onlinePlayer.id];
+                        return;
+                    }
+                    
+                    if (onlinePlayer.body && onlinePlayer.body.length > 0) {
+                        // Плавно перемещаем тело к новой позиции
+                        const head = onlinePlayer.body[0];
+                        const dx = onlinePlayer.x - head.x;
+                        const dy = onlinePlayer.y - head.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance > 0.1) {
+                            // Плавное движение головы
+                            head.x += dx * 0.3;
+                            head.y += dy * 0.3;
+                        } else {
+                            head.x = onlinePlayer.x;
+                            head.y = onlinePlayer.y;
+                        }
+                    }
+                });
+            }
+            
             // Обновляем уровень на основе массы
             player.level = calculateLevel(player.mass);
             
@@ -909,10 +943,19 @@
             
             // Онлайн игроки
             if (isOnline) {
+                const now = Date.now();
                 Object.values(onlinePlayers).forEach(onlinePlayer => {
+                    // Удаляем неактивных игроков (не обновлялись более 5 секунд)
+                    if (onlinePlayer.lastUpdate && (now - onlinePlayer.lastUpdate) > 5000) {
+                        delete onlinePlayers[onlinePlayer.id];
+                        return;
+                    }
+                    
                     if (onlinePlayer.body && onlinePlayer.body.length > 0) {
                         const onlinePlayerSize = 8 + (onlinePlayer.mass * 0.8);
-                        drawSnake(onlinePlayer.body, onlinePlayer.color, false, 'dragon', { x: 1, y: 0 }, onlinePlayerSize, viewWidth, viewHeight);
+                        // Используем правильное направление онлайн игрока
+                        const direction = onlinePlayer.direction || { x: 1, y: 0 };
+                        drawSnake(onlinePlayer.body, onlinePlayer.color, false, 'dragon', direction, onlinePlayerSize, viewWidth, viewHeight);
                         // Ник онлайн игрока
                         if (onlinePlayer.body.length > 0) {
                             drawName(onlinePlayer.body[0].x, onlinePlayer.body[0].y - 25, onlinePlayer.name, onlinePlayer.color, onlinePlayer.level);
@@ -1299,10 +1342,24 @@
                 return;
             }
             
+            // Собираем всех змей: игрок, боты и онлайн игроки
             const allSnakes = [
-                { length: player.mass || player.length, name: player.name, isPlayer: true },
-                ...bots.map(b => ({ length: b.length, name: b.name, isPlayer: false }))
+                { length: player.mass || player.length, name: player.name, isPlayer: true, isOnline: false },
+                ...bots.map(b => ({ length: b.mass || b.length, name: b.name, isPlayer: false, isOnline: false }))
             ];
+            
+            // Добавляем онлайн игроков
+            if (isOnline) {
+                Object.values(onlinePlayers).forEach(onlinePlayer => {
+                    allSnakes.push({
+                        length: onlinePlayer.mass || onlinePlayer.length,
+                        name: onlinePlayer.name,
+                        isPlayer: false,
+                        isOnline: true
+                    });
+                });
+            }
+            
             allSnakes.sort((a, b) => b.length - a.length);
             top3List.innerHTML = '';
             
@@ -1310,9 +1367,12 @@
                 const snake = allSnakes[i];
                 const item = document.createElement('div');
                 item.className = `top3-item rank${i + 1}`;
-                item.textContent = `${i + 1}. ${snake.name} (${snake.length})`;
+                item.textContent = `${i + 1}. ${snake.name} (${Math.floor(snake.length)})`;
                 if (snake.isPlayer) {
                     item.style.color = '#2ECC71';
+                    item.style.fontWeight = 'bold';
+                } else if (snake.isOnline) {
+                    item.style.color = '#3498DB'; // Синий цвет для онлайн игроков
                     item.style.fontWeight = 'bold';
                 }
                 top3List.appendChild(item);
@@ -1892,7 +1952,7 @@
             const firebaseConfig = {
                 apiKey: "AIzaSyAbZdP5504aKObNMmByNC0Xx6OMrsl5Sdk",
                 authDomain: "snake-io-game-cbbe7.firebaseapp.com",
-                databaseURL: "https://snake-io-game-cbbe7-default-rtdb.firebaseio.com",
+                databaseURL: "https://snake-io-game-cbbe7-default-rtdb.firebaseio.com/",
                 projectId: "snake-io-game-cbbe7",
                 storageBucket: "snake-io-game-cbbe7.firebasestorage.app",
                 messagingSenderId: "334920744888",
@@ -1932,6 +1992,9 @@
                 mass: player.mass,
                 level: player.level,
                 color: player.color,
+                directionX: player.direction.x,
+                directionY: player.direction.y,
+                length: player.length,
                 timestamp: Date.now()
             });
             
@@ -1941,15 +2004,31 @@
                 const id = snapshot.key;
                 
                 if (id !== playerId && !onlinePlayers[id]) {
+                    // Создаем начальное тело для онлайн игрока
+                    const initialBody = [];
+                    const bodyLength = Math.max(5, Math.floor(data.mass || 5));
+                    for (let i = 0; i < bodyLength; i++) {
+                        initialBody.push({
+                            x: (data.x || 0) - i * 20,
+                            y: (data.y || 0)
+                        });
+                    }
+                    
                     onlinePlayers[id] = {
                         id: id,
                         name: data.name,
-                        x: data.x,
-                        y: data.y,
-                        mass: data.mass,
-                        level: data.level,
-                        color: data.color,
-                        body: []
+                        x: data.x || 0,
+                        y: data.y || 0,
+                        mass: data.mass || 5,
+                        level: data.level || 1,
+                        color: data.color || '#2ECC71',
+                        direction: { 
+                            x: data.directionX || 1, 
+                            y: data.directionY || 0 
+                        },
+                        length: data.length || 5,
+                        body: initialBody,
+                        lastUpdate: Date.now()
                     };
                     
                     // Показываем уведомление о присоединении другого игрока
@@ -1963,10 +2042,43 @@
                 const id = snapshot.key;
                 
                 if (id !== playerId && onlinePlayers[id]) {
+                    const oldX = onlinePlayers[id].x;
+                    const oldY = onlinePlayers[id].y;
+                    
                     onlinePlayers[id].x = data.x;
                     onlinePlayers[id].y = data.y;
-                    onlinePlayers[id].mass = data.mass;
-                    onlinePlayers[id].level = data.level;
+                    onlinePlayers[id].mass = data.mass || onlinePlayers[id].mass;
+                    onlinePlayers[id].level = data.level || onlinePlayers[id].level;
+                    onlinePlayers[id].length = data.length || onlinePlayers[id].length;
+                    
+                    // Обновляем направление
+                    if (data.directionX !== undefined && data.directionY !== undefined) {
+                        onlinePlayers[id].direction = {
+                            x: data.directionX,
+                            y: data.directionY
+                        };
+                    }
+                    
+                    // Обновляем тело: добавляем новую позицию головы
+                    if (onlinePlayers[id].body && onlinePlayers[id].body.length > 0) {
+                        onlinePlayers[id].body.unshift({ x: data.x, y: data.y });
+                        // Ограничиваем длину тела
+                        while (onlinePlayers[id].body.length > onlinePlayers[id].length) {
+                            onlinePlayers[id].body.pop();
+                        }
+                    } else {
+                        // Если тело пустое, создаем его заново
+                        const bodyLength = Math.max(5, Math.floor(onlinePlayers[id].length));
+                        onlinePlayers[id].body = [];
+                        for (let i = 0; i < bodyLength; i++) {
+                            onlinePlayers[id].body.push({
+                                x: data.x - i * 20,
+                                y: data.y
+                            });
+                        }
+                    }
+                    
+                    onlinePlayers[id].lastUpdate = Date.now();
                 }
             });
             
@@ -1982,13 +2094,16 @@
         
         // Обновление позиции игрока в Firebase
         function updateOnlinePosition() {
-            if (!firebaseDatabase || !isOnline || !playerId) return;
+            if (!firebaseDatabase || !isOnline || !playerId || !player) return;
             
             firebaseDatabase.ref('players/' + playerId).update({
                 x: player.x,
                 y: player.y,
                 mass: player.mass,
                 level: player.level,
+                directionX: player.direction.x,
+                directionY: player.direction.y,
+                length: player.length,
                 timestamp: Date.now()
             });
         }

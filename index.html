@@ -249,7 +249,8 @@
                 name: savedName,
                 parts: [],
                 splitCooldown: 0,
-                ejectCooldown: 0
+                ejectCooldown: 0,
+                lastFoodTime: 0 // Время последнего поедания еды
             };
             
             // Начальное тело
@@ -611,7 +612,7 @@
                     // Проверяем столкновение с телом бота (только если бот ЗНАЧИТЕЛЬНО больше игрока)
                     // Добавляем большой запас, чтобы избежать ложных срабатываний
                     // И только если прошло время после последнего поедания еды
-                    if (botMass > playerMass * 1.5 && (!player.lastFoodTime || (gameFrame - player.lastFoodTime) > 30)) {
+                    if (botMass > playerMass * 1.5 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 30)) {
                         bot.body.forEach((segment, index) => {
                             if (index < 20) return; // Игнорируем первые 20 сегментов (увеличено с 10)
                             
@@ -647,7 +648,7 @@
 
             // Столкновение с собственным телом (проверяем только если длина больше 100)
             // И только если прошло достаточно времени после последнего поедания еды (минимум 30 кадров)
-            if (player.length > 100 && player.body.length > 100 && (!player.lastFoodTime || (gameFrame - player.lastFoodTime) > 30)) {
+            if (player.length > 100 && player.body.length > 100 && (!player.lastFoodTime || !gameFrame || (gameFrame - player.lastFoodTime) > 30)) {
                 // Проверяем только сегменты, которые достаточно далеко от головы
                 // Игнорируем первые 70 сегментов, чтобы избежать ложных срабатываний
                 player.body.forEach((segment, index) => {
@@ -1831,7 +1832,7 @@
             }
             
             // Защита от завершения игры сразу после поедания еды (в течение 30 кадров)
-            if (player.lastFoodTime && (gameFrame - player.lastFoodTime) < 30) {
+            if (player.lastFoodTime && gameFrame && (gameFrame - player.lastFoodTime) < 30) {
                 console.log('Защита: слишком рано после поедания еды');
                 return;
             }
